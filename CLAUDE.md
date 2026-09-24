@@ -67,8 +67,10 @@ python3 -m venv /tmp/hav
 ```
 
 Arrancan un HA real (sin mocks) en un directorio temporal en ~2 s. El script
-termina con `os._exit` por un segfault del intérprete al cerrarse (§6 de
-DECISIONES); si ves código 139 fuera de ahí, es otra cosa.
+termina con `os._exit` porque, en este Mac, HA 2026.9.2 con Python 3.14.7 da
+un segfault al cerrarse con cualquier entrada cargada, aunque sea de una
+integración oficial. No es de esta integración (§6 de DECISIONES, que además
+explica dos trampas del arnés al intentar aislar fallos así).
 
 Trampas de HA 2026.9 ya conocidas: importar `homeassistant` antes que
 cualquier cosa que importe `voluptuous`; los esquemas de los flujos se

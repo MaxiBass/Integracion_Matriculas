@@ -104,21 +104,35 @@ La importación automática solo ocurre cuando el registro no existe. Si falla
 (fichero ilegible), no se guarda nada y se vuelve a intentar en el siguiente
 arranque.
 
-## 6. Pendiente: segfault al cerrar el intérprete en las pruebas
+## 6. Segfault al cerrar el intérprete en las pruebas (no es de esta integración)
 
-Con el Python 3.14.7 del venv de pruebas, cuando la entrada se ha cargado y
-el detector ha arrancado, el intérprete da un segfault en la recogida de
-basura mientras descarga los módulos, después de que todas las pruebas hayan
-terminado. Se aisló hasta la tarea de fondo de `Detector.async_iniciar`, pero
-la misma lógica copiada en otro módulo no lo reproduce, y descargar la
-entrada antes de parar tampoco lo evita. No se encontró la causa.
+Con HA 2026.9.2 y el Python 3.14.7 de python.org en macOS, el proceso de
+pruebas termina con un segfault (código 139) al cerrar el intérprete, cuando
+la recogida de basura descarga los módulos. Ocurre después de que todas las
+pruebas hayan terminado.
+
+**Pasa con cualquier entrada de configuración cargada**: con esta integración,
+con una integración de juguete cuyo `async_setup_entry` solo devuelve `True`,
+y con la integración oficial `sun`. Sin ninguna entrada, sale limpio. El
+informe de macOS muestra el acceso a `0xdddddddddddddddd`, el patrón con el
+que el depurador de memoria de CPython rellena la memoria ya liberada: es un
+uso de memoria liberada en código nativo, algo que Python puro no puede
+provocar. Es un fallo de HA o de CPython en este entorno, no de esta
+integración.
 
 `tests/test_matriculas.py` termina con `os._exit()` para que el código de
 salida refleje las pruebas y no ese fallo.
 
-**Verificar en producción**: tras instalar, reiniciar HA desde la interfaz y
-comprobar en el registro del Supervisor que el núcleo se para limpio (sin
-código 139).
+Una primera investigación culpó al detector de esta integración. Estaba mal
+por dos trampas del arnés, que conviene no repetir:
+
+- Sustituir en caliente el logger o un método por objetos definidos en el
+  script cambia el orden en que se libera la memoria al cerrar, y eso basta
+  para que el fallo aparezca o desaparezca. No sirve para aislar.
+- `tests/test_matriculas.py` mete la raíz del repo al principio de
+  `sys.path`. Un script que lo importe carga siempre `custom_components` del
+  repo, no el del directorio de configuración temporal, así que las copias
+  editadas no llegan a ejecutarse.
 
 ## 7. Cada coche, un evento y una estadística
 

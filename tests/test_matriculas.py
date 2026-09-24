@@ -449,10 +449,11 @@ if __name__ == "__main__":
             print(f"  - {f}")
     else:
         print("Todo OK")
-    # os._exit y no sys.exit: con el Python 3.14.7 del venv, el intérprete
-    # da un segfault al recoger basura mientras descarga los módulos, después
-    # de que todo haya terminado. Sin esto, el código de salida sería 139
-    # aunque todas las pruebas pasen. Ver docs/DECISIONES.md §6.
+    # os._exit y no sys.exit: con HA 2026.9.2 y el Python 3.14.7 del venv, el
+    # intérprete da un segfault al cerrarse si hay cualquier entrada de
+    # configuración cargada (también con la integración oficial `sun`). Sin
+    # esto, el código de salida sería 139 aunque todas las pruebas pasen.
+    # Ver docs/DECISIONES.md §6.
     sys.stdout.flush()
     sys.stderr.flush()
     import os
