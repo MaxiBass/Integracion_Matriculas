@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Repo público: nunca subir datos reales de matrículas ni nombres.
+plates*.json
+*.corrupt.*

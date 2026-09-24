@@ -1,0 +1,20 @@
+{
+  "entity": {
+    "sensor": {
+      "registradas": { "default": "mdi:car-multiple" }
+    },
+    "event": {
+      "deteccion": { "default": "mdi:car-search" }
+    }
+  },
+  "services": {
+    "guardar": { "service": "mdi:car-plus" },
+    "editar": { "service": "mdi:car-cog" },
+    "eliminar": { "service": "mdi:car-remove" },
+    "ignorar": { "service": "mdi:eye-off" },
+    "dejar_de_ignorar": { "service": "mdi:eye" },
+    "buscar": { "service": "mdi:car-search" },
+    "listar": { "service": "mdi:format-list-bulleted" },
+    "importar": { "service": "mdi:file-import" }
+  }
+}

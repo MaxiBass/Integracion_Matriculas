@@ -1,0 +1,219 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Matrículas",
+        "description": "Reconoce las matrículas que lee Frigate y las identifica con el registro. Si existe el `plates.json` del sistema anterior, se importa al terminar.",
+        "data": {
+          "prefijo_mqtt": "Prefijo MQTT de Frigate",
+          "camaras": "Cámaras"
+        },
+        "data_description": {
+          "prefijo_mqtt": "El `topic_prefix` de la configuración MQTT de Frigate. Casi siempre `frigate`.",
+          "camaras": "Nombres de cámara de Frigate cuyas matrículas se tienen en cuenta. Vacío: todas."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Ya está configurada. Solo puede haber una."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Matrículas",
+        "data": {
+          "prefijo_mqtt": "Prefijo MQTT de Frigate",
+          "camaras": "Cámaras"
+        },
+        "data_description": {
+          "prefijo_mqtt": "El `topic_prefix` de la configuración MQTT de Frigate. Casi siempre `frigate`.",
+          "camaras": "Nombres de cámara de Frigate cuyas matrículas se tienen en cuenta. Vacío: todas."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "registradas": {
+        "name": "Registradas",
+        "state_attributes": {
+          "ignoradas": {
+            "name": "Ignoradas"
+          },
+          "caducadas": {
+            "name": "Caducadas"
+          }
+        }
+      }
+    },
+    "event": {
+      "deteccion": {
+        "name": "Detección",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "conocida": "Conocida",
+              "desconocida": "Desconocida",
+              "ignorada": "Ignorada",
+              "caducada": "Caducada"
+            }
+          }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "matricula_invalida": {
+      "message": "«{matricula}» no es una matrícula válida: tiene que tener entre 2 y 10 letras o cifras."
+    },
+    "nombre_vacio": {
+      "message": "Falta el nombre."
+    },
+    "no_existe": {
+      "message": "La matrícula {matricula} no está registrada."
+    },
+    "ya_existe": {
+      "message": "La matrícula {matricula} ya está registrada."
+    },
+    "ignorar_registrada": {
+      "message": "La matrícula {matricula} está registrada; elimínala antes de ignorarla."
+    },
+    "no_ignorada": {
+      "message": "La matrícula {matricula} no estaba ignorada."
+    },
+    "importar_no_existe": {
+      "message": "No existe el fichero {ruta}."
+    },
+    "importar_ilegible": {
+      "message": "No se pudo leer {ruta} como un plates.json válido. No se ha cambiado nada."
+    },
+    "no_cargada": {
+      "message": "La integración Matrículas no está cargada."
+    }
+  },
+  "services": {
+    "guardar": {
+      "name": "Guardar matrícula",
+      "description": "Registra una matrícula o sobrescribe la existente. Si estaba ignorada, deja de estarlo.",
+      "fields": {
+        "matricula": {
+          "name": "Matrícula",
+          "description": "Se admiten espacios y guiones; se guardan quitándolos y en mayúsculas."
+        },
+        "nombre": {
+          "name": "Nombre",
+          "description": "Quién es: propietario o conductor habitual."
+        },
+        "avisar": {
+          "name": "Avisar",
+          "description": "Si se notifica su llegada. Por defecto sí en las nuevas; en las existentes no se cambia si no se indica."
+        },
+        "abrir": {
+          "name": "Puede abrir",
+          "description": "Si la apertura automática le abre la puerta, también cuando la lectura es aproximada. Por defecto sí en las nuevas."
+        },
+        "notas": {
+          "name": "Notas",
+          "description": "Texto libre."
+        },
+        "caduca": {
+          "name": "Caduca",
+          "description": "Último día en que se reconoce. Después se trata como caducada: avisa pero no abre. Vacío para quitar la caducidad."
+        }
+      }
+    },
+    "editar": {
+      "name": "Editar matrícula",
+      "description": "Cambia solo los campos indicados de una matrícula registrada.",
+      "fields": {
+        "matricula": {
+          "name": "Matrícula",
+          "description": "Se admiten espacios y guiones; se guardan quitándolos y en mayúsculas."
+        },
+        "nueva_matricula": {
+          "name": "Nueva matrícula",
+          "description": "Para corregir la matrícula. La antigua desaparece y sus estadísticas pasan a la nueva."
+        },
+        "nombre": {
+          "name": "Nombre",
+          "description": "Quién es: propietario o conductor habitual."
+        },
+        "avisar": {
+          "name": "Avisar",
+          "description": "Si se notifica su llegada. Por defecto sí en las nuevas; en las existentes no se cambia si no se indica."
+        },
+        "abrir": {
+          "name": "Puede abrir",
+          "description": "Si la apertura automática le abre la puerta, también cuando la lectura es aproximada. Por defecto sí en las nuevas."
+        },
+        "notas": {
+          "name": "Notas",
+          "description": "Texto libre."
+        },
+        "caduca": {
+          "name": "Caduca",
+          "description": "Último día en que se reconoce. Después se trata como caducada: avisa pero no abre. Vacío para quitar la caducidad."
+        }
+      }
+    },
+    "eliminar": {
+      "name": "Eliminar matrícula",
+      "description": "Borra una matrícula del registro. Sus estadísticas se conservan.",
+      "fields": {
+        "matricula": {
+          "name": "Matrícula",
+          "description": "Se admiten espacios y guiones; se guardan quitándolos y en mayúsculas."
+        }
+      }
+    },
+    "ignorar": {
+      "name": "Ignorar matrícula",
+      "description": "No volver a avisar de una matrícula desconocida.",
+      "fields": {
+        "matricula": {
+          "name": "Matrícula",
+          "description": "Se admiten espacios y guiones; se guardan quitándolos y en mayúsculas."
+        }
+      }
+    },
+    "dejar_de_ignorar": {
+      "name": "Dejar de ignorar",
+      "description": "Vuelve a avisar de una matrícula que estaba ignorada.",
+      "fields": {
+        "matricula": {
+          "name": "Matrícula",
+          "description": "Se admiten espacios y guiones; se guardan quitándolos y en mayúsculas."
+        }
+      }
+    },
+    "buscar": {
+      "name": "Buscar matrícula",
+      "description": "Identifica una lectura igual que si llegara de Frigate, con la misma tolerancia a errores. Solo devuelve el resultado.",
+      "fields": {
+        "matricula": {
+          "name": "Matrícula",
+          "description": "Se admiten espacios y guiones; se guardan quitándolos y en mayúsculas."
+        }
+      }
+    },
+    "listar": {
+      "name": "Listar matrículas",
+      "description": "Devuelve las registradas con sus estadísticas, las ignoradas y las desconocidas vistas, de más a menos frecuentes."
+    },
+    "importar": {
+      "name": "Importar plates.json",
+      "description": "Importa matrículas del sistema anterior sin modificar el fichero. Conserva «puede abrir», notas y caducidad.",
+      "fields": {
+        "ruta": {
+          "name": "Ruta",
+          "description": "Por defecto, /config/packages/videoportero/plates.json."
+        },
+        "reemplazar": {
+          "name": "Reemplazar",
+          "description": "Además borra las matrículas que no estén en el fichero."
+        }
+      }
+    }
+  }
+}

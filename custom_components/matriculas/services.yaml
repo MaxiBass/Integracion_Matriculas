@@ -1,0 +1,98 @@
+guardar:
+  fields:
+    matricula:
+      required: true
+      example: 1234BCD
+      selector:
+        text:
+    nombre:
+      required: true
+      example: Abuelo
+      selector:
+        text:
+    avisar:
+      selector:
+        boolean:
+    abrir:
+      selector:
+        boolean:
+    notas:
+      selector:
+        text:
+          multiline: true
+    caduca:
+      selector:
+        date:
+
+editar:
+  fields:
+    matricula:
+      required: true
+      example: 1234BCD
+      selector:
+        text:
+    nueva_matricula:
+      example: 1234BCF
+      selector:
+        text:
+    nombre:
+      selector:
+        text:
+    avisar:
+      selector:
+        boolean:
+    abrir:
+      selector:
+        boolean:
+    notas:
+      selector:
+        text:
+          multiline: true
+    caduca:
+      selector:
+        date:
+
+eliminar:
+  fields:
+    matricula:
+      required: true
+      example: 1234BCD
+      selector:
+        text:
+
+ignorar:
+  fields:
+    matricula:
+      required: true
+      example: 1234BCD
+      selector:
+        text:
+
+dejar_de_ignorar:
+  fields:
+    matricula:
+      required: true
+      example: 1234BCD
+      selector:
+        text:
+
+buscar:
+  fields:
+    matricula:
+      required: true
+      example: 1234BCD
+      selector:
+        text:
+
+listar:
+
+importar:
+  fields:
+    ruta:
+      example: /config/packages/videoportero/plates.json
+      selector:
+        text:
+    reemplazar:
+      default: false
+      selector:
+        boolean:

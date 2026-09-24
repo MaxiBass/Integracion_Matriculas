@@ -1,0 +1,219 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "License plates",
+        "description": "Identifies the plates Frigate reads against the registry. If the previous system's `plates.json` exists, it is imported when finished.",
+        "data": {
+          "prefijo_mqtt": "Frigate MQTT prefix",
+          "camaras": "Cameras"
+        },
+        "data_description": {
+          "prefijo_mqtt": "The `topic_prefix` of Frigate's MQTT configuration. Almost always `frigate`.",
+          "camaras": "Frigate camera names whose plates are taken into account. Empty: all of them."
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured. Only one instance is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "License plates",
+        "data": {
+          "prefijo_mqtt": "Frigate MQTT prefix",
+          "camaras": "Cameras"
+        },
+        "data_description": {
+          "prefijo_mqtt": "The `topic_prefix` of Frigate's MQTT configuration. Almost always `frigate`.",
+          "camaras": "Frigate camera names whose plates are taken into account. Empty: all of them."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "registradas": {
+        "name": "Registered",
+        "state_attributes": {
+          "ignoradas": {
+            "name": "Ignored"
+          },
+          "caducadas": {
+            "name": "Expired"
+          }
+        }
+      }
+    },
+    "event": {
+      "deteccion": {
+        "name": "Detection",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "conocida": "Known",
+              "desconocida": "Unknown",
+              "ignorada": "Ignored",
+              "caducada": "Expired"
+            }
+          }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "matricula_invalida": {
+      "message": "“{matricula}” is not a valid plate: it must have between 2 and 10 letters or digits."
+    },
+    "nombre_vacio": {
+      "message": "The name is missing."
+    },
+    "no_existe": {
+      "message": "Plate {matricula} is not registered."
+    },
+    "ya_existe": {
+      "message": "Plate {matricula} is already registered."
+    },
+    "ignorar_registrada": {
+      "message": "Plate {matricula} is registered; delete it before ignoring it."
+    },
+    "no_ignorada": {
+      "message": "Plate {matricula} was not ignored."
+    },
+    "importar_no_existe": {
+      "message": "File {ruta} does not exist."
+    },
+    "importar_ilegible": {
+      "message": "{ruta} could not be read as a valid plates.json. Nothing has been changed."
+    },
+    "no_cargada": {
+      "message": "The License plates integration is not loaded."
+    }
+  },
+  "services": {
+    "guardar": {
+      "name": "Save plate",
+      "description": "Registers a plate or overwrites the existing one. If it was ignored, it no longer is.",
+      "fields": {
+        "matricula": {
+          "name": "Plate",
+          "description": "Spaces and hyphens are accepted; they are removed and the plate is stored in upper case."
+        },
+        "nombre": {
+          "name": "Name",
+          "description": "Who it is: owner or usual driver."
+        },
+        "avisar": {
+          "name": "Notify",
+          "description": "Whether its arrival is notified. Defaults to yes for new plates; left unchanged on existing ones if omitted."
+        },
+        "abrir": {
+          "name": "Can open",
+          "description": "Whether automatic opening opens the gate for it, also when the reading is approximate. Defaults to yes for new plates."
+        },
+        "notas": {
+          "name": "Notes",
+          "description": "Free text."
+        },
+        "caduca": {
+          "name": "Expires",
+          "description": "Last day it is recognised. After that it is treated as expired: it notifies but does not open. Empty to remove the expiry."
+        }
+      }
+    },
+    "editar": {
+      "name": "Edit plate",
+      "description": "Changes only the given fields of a registered plate.",
+      "fields": {
+        "matricula": {
+          "name": "Plate",
+          "description": "Spaces and hyphens are accepted; they are removed and the plate is stored in upper case."
+        },
+        "nueva_matricula": {
+          "name": "New plate",
+          "description": "To correct the plate. The old one disappears and its statistics move to the new one."
+        },
+        "nombre": {
+          "name": "Name",
+          "description": "Who it is: owner or usual driver."
+        },
+        "avisar": {
+          "name": "Notify",
+          "description": "Whether its arrival is notified. Defaults to yes for new plates; left unchanged on existing ones if omitted."
+        },
+        "abrir": {
+          "name": "Can open",
+          "description": "Whether automatic opening opens the gate for it, also when the reading is approximate. Defaults to yes for new plates."
+        },
+        "notas": {
+          "name": "Notes",
+          "description": "Free text."
+        },
+        "caduca": {
+          "name": "Expires",
+          "description": "Last day it is recognised. After that it is treated as expired: it notifies but does not open. Empty to remove the expiry."
+        }
+      }
+    },
+    "eliminar": {
+      "name": "Delete plate",
+      "description": "Removes a plate from the registry. Its statistics are kept.",
+      "fields": {
+        "matricula": {
+          "name": "Plate",
+          "description": "Spaces and hyphens are accepted; they are removed and the plate is stored in upper case."
+        }
+      }
+    },
+    "ignorar": {
+      "name": "Ignore plate",
+      "description": "Stop notifying about an unknown plate.",
+      "fields": {
+        "matricula": {
+          "name": "Plate",
+          "description": "Spaces and hyphens are accepted; they are removed and the plate is stored in upper case."
+        }
+      }
+    },
+    "dejar_de_ignorar": {
+      "name": "Stop ignoring",
+      "description": "Notify again about a plate that was ignored.",
+      "fields": {
+        "matricula": {
+          "name": "Plate",
+          "description": "Spaces and hyphens are accepted; they are removed and the plate is stored in upper case."
+        }
+      }
+    },
+    "buscar": {
+      "name": "Look up plate",
+      "description": "Identifies a reading exactly as if it came from Frigate, with the same error tolerance. Only returns the result.",
+      "fields": {
+        "matricula": {
+          "name": "Plate",
+          "description": "Spaces and hyphens are accepted; they are removed and the plate is stored in upper case."
+        }
+      }
+    },
+    "listar": {
+      "name": "List plates",
+      "description": "Returns the registered plates with their statistics, the ignored ones and the unknown ones seen, most frequent first."
+    },
+    "importar": {
+      "name": "Import plates.json",
+      "description": "Imports plates from the previous system without modifying the file. Keeps “can open”, notes and expiry.",
+      "fields": {
+        "ruta": {
+          "name": "Path",
+          "description": "Defaults to /config/packages/videoportero/plates.json."
+        },
+        "reemplazar": {
+          "name": "Replace",
+          "description": "Also deletes the plates that are not in the file."
+        }
+      }
+    }
+  }
+}
