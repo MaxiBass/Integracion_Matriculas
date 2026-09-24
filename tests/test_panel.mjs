@@ -102,6 +102,17 @@ comprobar(p.mensajeError({ code: "x", message: "Otro fallo" }) === "Otro fallo",
 comprobar(p.urlFoto("1758.4-abc") === "/api/frigate/notifications/1758.4-abc/thumbnail.jpg", "url de la foto de Frigate");
 comprobar(p.urlFoto("") === "", "sin id no hay foto");
 
+// Botón del menú: como el ha-menu-button de HA, solo si la barra lateral no se ve.
+const panel = new p.MatriculasPanel();
+const menu = (narrow, dockedSidebar) => {
+  panel.narrow = narrow;
+  panel.hass = { dockedSidebar };
+  return panel._verMenu();
+};
+comprobar(!menu(false, "docked"), "menú oculto con la barra lateral a la vista");
+comprobar(menu(true, "docked"), "menú visible en pantalla estrecha");
+comprobar(menu(false, "always_hidden"), "menú visible si la barra lateral está siempre oculta");
+
 console.log();
 if (fallos.length) {
   console.log(`${fallos.length} FALLOS`);

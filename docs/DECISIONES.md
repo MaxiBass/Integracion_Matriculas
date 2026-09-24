@@ -184,6 +184,13 @@ montaba sobre el campo de la matrícula (`aspect-ratio` dentro de una rejilla),
 y un nombre largo desbordaba la página en el móvil (hacía falta
 `minmax(0, 1fr)` en la columna de la lista).
 
+Un tercero solo se vio en el HA real, porque la demostración simula una
+pantalla estrecha: el botón del menú salía siempre, también con la barra
+lateral abierta. `.icono { display: inline-flex }` ganaba al atributo
+`hidden`. Ahora hay una regla `[hidden]` que manda, y el botón sigue la misma
+lógica que el `ha-menu-button` de HA: se ve en pantalla estrecha o con la
+barra lateral siempre oculta (v0.2.1).
+
 ## 10. Plan de migración
 
 1. **Fase 1 — en sombra** (esta versión). La integración importa el

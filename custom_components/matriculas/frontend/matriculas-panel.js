@@ -211,6 +211,7 @@ const ESTILOS = `
   --mt-radio: var(--ha-card-border-radius, 12px);
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 svg { width: 24px; height: 24px; fill: currentColor; flex: none; }
 button { font: inherit; cursor: pointer; }
 .cabecera {
@@ -332,6 +333,7 @@ export class MatriculasPanel extends Base {
   set hass(hass) {
     const primero = !this._hass;
     this._hass = hass;
+    this._actualizarMenu();
     if (primero && this.isConnected) this._suscribir();
   }
 
@@ -341,8 +343,17 @@ export class MatriculasPanel extends Base {
 
   set narrow(valor) {
     this._narrow = Boolean(valor);
+    this._actualizarMenu();
+  }
+
+  // Igual que el ha-menu-button de HA: solo si la barra lateral no está a la vista.
+  _verMenu() {
+    return this._narrow || this._hass?.dockedSidebar === "always_hidden";
+  }
+
+  _actualizarMenu() {
     const boton = this.shadowRoot?.querySelector("#menu");
-    if (boton) boton.hidden = !this._narrow;
+    if (boton) boton.hidden = !this._verMenu();
   }
 
   connectedCallback() {
@@ -383,7 +394,7 @@ export class MatriculasPanel extends Base {
     raiz.innerHTML = `
       <style>${ESTILOS}</style>
       <div class="cabecera">
-        <button class="icono" id="menu" title="Menú" ${this._narrow ? "" : "hidden"}>${icono("menu")}</button>
+        <button class="icono" id="menu" title="Menú" ${this._verMenu() ? "" : "hidden"}>${icono("menu")}</button>
         <h1>Matrículas</h1>
       </div>
       <div class="contenido">
