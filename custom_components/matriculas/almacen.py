@@ -35,12 +35,14 @@ from .const import (
     CONOCIDA,
     DESCONOCIDA,
     DOMAIN,
+    HISTORIAL_PANEL,
     IGNORADA,
     LONGITUD_MAXIMA,
     LONGITUD_MAXIMA_NOMBRE,
     LONGITUD_MINIMA,
     MAX_HISTORIAL,
     SEGUNDOS_GUARDADO_DETECCIONES,
+    SENAL_ESTADISTICAS,
     SENAL_REGISTRO,
     VERSION_ALMACEN,
 )
@@ -145,6 +147,27 @@ class Almacen:
             "matricula": matricula,
             **self.matriculas[matricula],
             "vista": self.vistas.get(matricula),
+        }
+
+    def instantanea(self) -> dict[str, Any]:
+        """Todo lo que necesita el panel (y `matriculas.listar`)."""
+        matriculas = sorted(
+            (self.ficha(m) for m in self.matriculas),
+            key=lambda f: (f["nombre"].casefold(), f["matricula"]),
+        )
+        desconocidas = sorted(
+            (
+                {"matricula": m, **v}
+                for m, v in self.vistas.items()
+                if m not in self.matriculas and m not in self.ignoradas
+            ),
+            key=lambda v: (-v["veces"], v["matricula"]),
+        )
+        return {
+            "matriculas": matriculas,
+            "ignoradas": [{"matricula": m, **v} for m, v in sorted(self.ignoradas.items())],
+            "desconocidas": desconocidas,
+            "historial": self.historial[-HISTORIAL_PANEL:][::-1],
         }
 
     def resolver(self, leida: str) -> dict[str, Any]:
@@ -279,6 +302,7 @@ class Almacen:
                 self._store_detecciones.async_delay_save(
                     self._datos_detecciones, SEGUNDOS_GUARDADO_DETECCIONES
                 )
+                async_dispatcher_send(self.hass, SENAL_ESTADISTICAS)
             self.ignoradas.pop(destino, None)
         self.matriculas[destino] = datos
         await self._async_guardar_registro()
@@ -378,8 +402,12 @@ class Almacen:
         vista["ultima"] = cuando
         vista["veces"] += 1
         vista["camara"] = entrada.get("camara", "")
+        # Para la foto de la última vez en el panel.
+        vista["frigate_id"] = entrada.get("frigate_id", "")
+        vista["leida"] = entrada.get("leida", clave)
         self.historial.append(entrada)
         del self.historial[:-MAX_HISTORIAL]
         self._store_detecciones.async_delay_save(
             self._datos_detecciones, SEGUNDOS_GUARDADO_DETECCIONES
         )
+        async_dispatcher_send(self.hass, SENAL_ESTADISTICAS)

@@ -153,15 +153,46 @@ el código. En HA 2026.9 el `entity_id` se genera a partir del nombre en
 inglés salvo en algunos idiomas, y las automatizaciones necesitan un nombre
 estable.
 
-## 9. Plan de migración
+## 9. El panel
+
+- **Un solo fichero JS, sin dependencias ni compilación.** Un custom element
+  con Shadow DOM y las variables CSS del tema de HA. Nada de Lit desde un CDN:
+  el panel tiene que funcionar aunque la casa se quede sin Internet.
+- **Lee por websocket, escribe por servicios.** `matriculas/suscribir` manda
+  todos los datos y los reenvía en cuanto cambia algo (edición o detección
+  cerrada). Las ediciones llaman a los servicios de siempre, así que la
+  validación y los errores son los mismos que desde una automatización.
+- **Para todos los usuarios** (`require_admin: false`): no solo los
+  administradores ponen nombres a las matrículas nuevas.
+- **Pulsar fuera del diálogo no lo cierra.** En el móvil es fácil tocar fuera
+  sin querer y se perdía lo escrito. Se cierra con la X, Cancelar o Escape.
+- **Añadir una que ya existe da error** en vez de sobrescribirla (el servicio
+  `guardar` sí sobrescribe: lo usan las notificaciones).
+- **Borrar pide una segunda pulsación**, sin diálogo de confirmación aparte.
+- **Solo en español.** Es una integración personal; los textos del panel no
+  pasan por las traducciones de HA. Los mensajes de error del backend sí
+  tienen su versión en español dentro del panel, porque el mensaje que HA
+  genera a partir de la clave de traducción sale en inglés.
+- **Fotos del proxy de notificaciones de Frigate**, que no necesita el token
+  de HA (una `<img>` no lo manda). Si Frigate ya no conserva la foto, se
+  quita el hueco.
+- **Historial: las últimas 100** en el panel, de las 500 guardadas.
+
+Probado con `tests/panel_demo.html` en escritorio y móvil (375 px), en tema
+claro y oscuro. Dos fallos encontrados así: la foto grande del diálogo se
+montaba sobre el campo de la matrícula (`aspect-ratio` dentro de una rejilla),
+y un nombre largo desbordaba la página en el móvil (hacía falta
+`minmax(0, 1fr)` en la columna de la lista).
+
+## 10. Plan de migración
 
 1. **Fase 1 — en sombra** (esta versión). La integración importa el
    `plates.json`, escucha Frigate, lanza eventos y lleva estadísticas, pero
    nadie la usa todavía. El sistema anterior sigue mandando. Lo que se edite
    en el dashboard antiguo no llega a la integración: antes de la fase 3,
    ejecutar `matriculas.importar` (fusionando) para traerlo.
-2. **Fase 2 — panel** en la barra lateral: tabla con búsqueda, edición,
-   bandeja de desconocidas con la foto de Frigate.
+2. **Fase 2 — panel** en la barra lateral (v0.2.0, §9). El dashboard antiguo
+   `gestion_de_matriculas` sigue existiendo hasta la fase 3.
 3. **Fase 3 — cambio.** "VTO - Visita unificada" pasa a escuchar
    `matriculas_detectada` en vez del MQTT en bruto y la macro; las
    notificaciones de matrícula nueva llaman a `matriculas.guardar` e

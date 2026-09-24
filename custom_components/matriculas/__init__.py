@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.components import frontend, panel_custom
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import (
@@ -20,6 +23,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
 from .almacen import SIN_CAMBIO, Almacen
 from .const import (
@@ -27,9 +31,14 @@ from .const import (
     CONF_PREFIJO_MQTT,
     DEFECTO_PREFIJO_MQTT,
     DOMAIN,
+    ELEMENTO_PANEL,
+    FICHERO_PANEL,
+    RUTA_ESTATICA,
     RUTA_LEGADO,
+    URL_PANEL,
 )
 from .detector import Detector
+from .websocket import async_registrar as async_registrar_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,8 +97,9 @@ type EntradaMatriculas = ConfigEntry[DatosMatriculas]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Registra los servicios, que existen aunque la entrada no cargue."""
+    """Registra servicios y websocket, que existen aunque la entrada no cargue."""
     _registrar_servicios(hass)
+    async_registrar_websocket(hass)
     return True
 
 
@@ -116,6 +126,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EntradaMatriculas) -> bo
     entry.runtime_data = DatosMatriculas(almacen, detector)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await _async_registrar_panel(hass)
 
     # En segundo plano: esperar a MQTT no debe retrasar el arranque de HA.
     entry.async_create_background_task(
@@ -128,9 +139,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: EntradaMatriculas) -> bo
 async def async_unload_entry(hass: HomeAssistant, entry: EntradaMatriculas) -> bool:
     descargada = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if descargada:
+        frontend.async_remove_panel(hass, URL_PANEL, warn_if_unknown=False)
         await entry.runtime_data.detector.async_parar()
         await entry.runtime_data.almacen.async_volcar()
     return descargada
+
+
+async def _async_registrar_panel(hass: HomeAssistant) -> None:
+    """Panel "Matrículas" en la barra lateral, para todos los usuarios."""
+    if not hass.data.get(f"{DOMAIN}_ruta_estatica"):
+        # Una ruta estática no se puede quitar: se registra una sola vez.
+        await hass.http.async_register_static_paths(
+            [
+                StaticPathConfig(
+                    f"{RUTA_ESTATICA}/{FICHERO_PANEL}",
+                    str(Path(__file__).parent / "frontend" / FICHERO_PANEL),
+                    cache_headers=False,
+                )
+            ]
+        )
+        hass.data[f"{DOMAIN}_ruta_estatica"] = True
+
+    # La versión en la URL obliga al navegador a descargar el JS nuevo al
+    # actualizar la integración.
+    version = (await async_get_integration(hass, DOMAIN)).version
+    await panel_custom.async_register_panel(
+        hass,
+        frontend_url_path=URL_PANEL,
+        webcomponent_name=ELEMENTO_PANEL,
+        sidebar_title="Matrículas",
+        sidebar_icon="mdi:car-search",
+        module_url=f"{RUTA_ESTATICA}/{FICHERO_PANEL}?v={version}",
+        require_admin=False,
+    )
 
 
 async def _al_actualizar_opciones(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -189,24 +230,7 @@ def _registrar_servicios(hass: HomeAssistant) -> None:
         return resultado
 
     async def listar(call: ServiceCall) -> ServiceResponse:
-        almacen = _almacen(hass)
-        matriculas = sorted(
-            (almacen.ficha(m) for m in almacen.matriculas),
-            key=lambda f: (f["nombre"].casefold(), f["matricula"]),
-        )
-        desconocidas = sorted(
-            (
-                {"matricula": m, **v}
-                for m, v in almacen.vistas.items()
-                if m not in almacen.matriculas and m not in almacen.ignoradas
-            ),
-            key=lambda v: (-v["veces"], v["matricula"]),
-        )
-        return {
-            "matriculas": matriculas,
-            "ignoradas": [{"matricula": m, **v} for m, v in sorted(almacen.ignoradas.items())],
-            "desconocidas": desconocidas,
-        }
+        return _almacen(hass).instantanea()
 
     async def importar(call: ServiceCall) -> ServiceResponse:
         ruta = call.data.get("ruta") or hass.config.path(RUTA_LEGADO)

@@ -1,13 +1,22 @@
 {
   "domain": "matriculas",
   "name": "Matrículas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentation": "https://github.com/MaxiBass/Integracion_Matriculas",
   "issue_tracker": "https://github.com/MaxiBass/Integracion_Matriculas/issues",
   "requirements": [],
-  "dependencies": [],
-  "after_dependencies": ["mqtt"],
-  "codeowners": ["@MaxiBass"],
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "after_dependencies": [
+    "mqtt"
+  ],
+  "codeowners": [
+    "@MaxiBass"
+  ],
   "iot_class": "local_push",
   "config_flow": true,
   "integration_type": "service",

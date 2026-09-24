@@ -1,0 +1,118 @@
+<!doctype html>
+<!--
+  Demostración del panel con un `hass` falso, para revisarlo en un navegador
+  sin Home Assistant. Datos inventados (repositorio público).
+
+  Sirve la carpeta con cualquier servidor estático y abre esta página.
+  ?tema=oscuro prueba los colores del tema oscuro; ?vacio=1, el panel sin datos.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matrículas — demostración</title>
+<style>
+  :root {
+    --primary-color: #03a9f4; --primary-background-color: #fafafa; --card-background-color: #fff;
+    --primary-text-color: #212121; --secondary-text-color: #727272; --divider-color: rgba(0,0,0,.12);
+    --error-color: #db4437; --success-color: #43a047; --warning-color: #ffa600;
+    --app-header-background-color: #03a9f4; --app-header-text-color: #fff;
+  }
+  :root.oscuro {
+    --primary-background-color: #111111; --card-background-color: #1c1c1c; --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b; --divider-color: rgba(225,225,225,.12);
+    --app-header-background-color: #101e24; --app-header-text-color: #e1e1e1;
+  }
+  html, body { margin: 0; height: 100%; }
+</style>
+</head>
+<body>
+<matriculas-panel></matriculas-panel>
+<script type="module">
+  const q = new URLSearchParams(location.search);
+  if (q.get("tema") === "oscuro") document.documentElement.classList.add("oscuro");
+
+  await import("../custom_components/matriculas/frontend/matriculas-panel.js")
+    .catch(() => import("./matriculas-panel.js"));
+
+  const hace = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  const ficha = (matricula, nombre, extra = {}) => ({
+    matricula, nombre, avisar: true, abrir: true, notas: "", caduca: null,
+    creada: hace(900), modificada: hace(900), vista: null, ...extra,
+  });
+  const datos = q.get("vacio") ? { matriculas: [], desconocidas: [], ignoradas: [], historial: [] } : {
+    matriculas: [
+      ficha("1234BCD", "Abuela", { vista: { primera: hace(500), ultima: hace(3), veces: 41, frigate_id: "demo-1" } }),
+      ficha("5678FGH", "Reparto", { avisar: false, abrir: false, vista: { primera: hace(400), ultima: hace(30), veces: 12, frigate_id: "demo-2" } }),
+      ficha("9012JKL", "Tío Ramón", { notas: "Viene los domingos", vista: { primera: hace(300), ultima: hace(80), veces: 5 } }),
+      ficha("3456BMX", "Fontanero", { caduca: "2026-12-31" }),
+      ficha("7777NBV", "Jardinería", { caduca: "2026-01-15", abrir: false }),
+      ficha("2468DFG", "Nombre muy largo de una persona con dos apellidos y un apodo", {}),
+    ],
+    desconocidas: [
+      { matricula: "8642HJK", primera: hace(200), ultima: hace(5), veces: 4, camara: "Videoportero-Sub", frigate_id: "demo-3" },
+      { matricula: "1357CDF", primera: hace(100), ultima: hace(50), veces: 1, camara: "Videoportero-Sub", frigate_id: "caducada" },
+    ],
+    ignoradas: [{ matricula: "9999ZZZ", desde: hace(700) }],
+    historial: [
+      { hora: hace(3), matricula: "1234BCD", leida: "1234BCD", tipo: "conocida", nombre: "Abuela", aproximada: false, score: 0.93, camara: "Videoportero-Sub", frigate_id: "demo-1" },
+      { hora: hace(5), matricula: "8642HJK", leida: "8642HJK", tipo: "desconocida", nombre: "", aproximada: false, score: 0.88, camara: "Videoportero-Sub", frigate_id: "demo-3" },
+      { hora: hace(30), matricula: "5678FGH", leida: "5678FCH", tipo: "conocida", nombre: "Reparto", aproximada: true, score: 0.81, camara: "Videoportero-Sub", frigate_id: "demo-2" },
+      { hora: hace(52), matricula: "7777NBV", leida: "7777NBV", tipo: "caducada", nombre: "Jardinería", aproximada: false, score: 0.9, camara: "Videoportero-Sub", frigate_id: "" },
+    ],
+  };
+
+  // Imitación de la integración: mismas reglas y mismos errores.
+  let avisar = null;
+  const enviar = () => avisar?.(JSON.parse(JSON.stringify(datos)));
+  const error = (translation_key, translation_placeholders = {}) =>
+    Promise.reject({ code: "service_validation_error", message: translation_key, translation_key, translation_placeholders });
+  const norma = (m) => String(m ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const hass = {
+    connection: {
+      async subscribeMessage(cb, msg) {
+        console.log("suscribir", msg);
+        avisar = cb;
+        setTimeout(enviar, 400);
+        return () => (avisar = null);
+      },
+    },
+    async callWS(msg) {
+      console.log("callWS", msg);
+      await new Promise((r) => setTimeout(r, 250));
+      const { service, service_data: d } = msg;
+      const m = norma(d.matricula);
+      const i = datos.matriculas.findIndex((f) => f.matricula === m);
+      if (service === "guardar") {
+        if (m.length < 2) return error("matricula_invalida", { matricula: d.matricula });
+        const nueva = ficha(m, d.nombre, { avisar: d.avisar, abrir: d.abrir, notas: d.notas ?? "", caduca: d.caduca ?? null });
+        if (i >= 0) datos.matriculas[i] = { ...datos.matriculas[i], ...nueva, vista: datos.matriculas[i].vista };
+        else datos.matriculas.push({ ...nueva, vista: datos.desconocidas.find((v) => v.matricula === m) ?? null });
+        datos.desconocidas = datos.desconocidas.filter((v) => v.matricula !== m);
+        datos.ignoradas = datos.ignoradas.filter((v) => v.matricula !== m);
+      } else if (service === "editar") {
+        if (i < 0) return error("no_existe", { matricula: m });
+        const destino = d.nueva_matricula ? norma(d.nueva_matricula) : m;
+        if (destino !== m && datos.matriculas.some((f) => f.matricula === destino)) return error("ya_existe", { matricula: destino });
+        datos.matriculas[i] = { ...datos.matriculas[i], matricula: destino, nombre: d.nombre, avisar: d.avisar, abrir: d.abrir, notas: d.notas, caduca: d.caduca || null };
+      } else if (service === "eliminar") {
+        if (i < 0) return error("no_existe", { matricula: m });
+        datos.matriculas.splice(i, 1);
+      } else if (service === "ignorar") {
+        datos.desconocidas = datos.desconocidas.filter((v) => v.matricula !== m);
+        datos.ignoradas.push({ matricula: m, desde: new Date().toISOString() });
+      } else if (service === "dejar_de_ignorar") {
+        datos.ignoradas = datos.ignoradas.filter((v) => v.matricula !== m);
+      }
+      datos.matriculas.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+      setTimeout(enviar, 50);
+      return null;
+    },
+  };
+  const panel = document.querySelector("matriculas-panel");
+  panel.narrow = matchMedia("(max-width: 870px)").matches;
+  panel.hass = hass;
+  window.panel = panel;
+</script>
+</body>
+</html>

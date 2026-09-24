@@ -36,6 +36,15 @@ EVENTO_DETECTADA = "matriculas_detectada"
 
 SENAL_REGISTRO = f"{DOMAIN}_registro_actualizado"
 SENAL_DETECCION = f"{DOMAIN}_deteccion"
+SENAL_ESTADISTICAS = f"{DOMAIN}_estadisticas_actualizadas"
+
+# Panel de la barra lateral
+URL_PANEL = "matriculas"
+RUTA_ESTATICA = "/matriculas_static"
+FICHERO_PANEL = "matriculas-panel.js"
+ELEMENTO_PANEL = "matriculas-panel"
+# El historial completo se guarda (MAX_HISTORIAL); al panel solo van los últimos.
+HISTORIAL_PANEL = 100
 
 CONOCIDA = "conocida"
 DESCONOCIDA = "desconocida"

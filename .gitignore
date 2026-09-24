@@ -5,3 +5,6 @@ __pycache__/
 # Repo público: nunca subir datos reales de matrículas ni nombres.
 plates*.json
 *.corrupt.*
+
+# Configuración local de Claude (servidor de la demo del panel)
+.claude/

@@ -30,6 +30,8 @@ custom_components/matriculas/
   almacen.py        registro + detecciones en .storage, importación del legado
   detector.py       suscripción MQTT a Frigate, deduplicación por coche
   __init__.py       alta de la entrada y servicios
+  websocket.py      canal matriculas/suscribir del panel
+  frontend/matriculas-panel.js   el panel (JS sin dependencias)
   sensor.py, event.py, entity.py, config_flow.py
 docs/DECISIONES.md  por qué es así; NO va en custom_components
 tests/test_matriculas.py
@@ -64,9 +66,14 @@ editar antes en el repo.
 python3 -m venv /tmp/hav
 /tmp/hav/bin/pip install homeassistant==2026.9.2 paho-mqtt
 /tmp/hav/bin/python tests/test_matriculas.py
+node tests/test_panel.mjs
 ```
 
-Arrancan un HA real (sin mocks) en un directorio temporal en ~2 s. El script
+Para ver el panel sin HA: `tests/panel_demo.html` con datos inventados (la
+sesión de Claude la sirve con `preview_start` y un `.claude/launch.json` en
+`~/Downloads/GitHub`, que queda fuera del repo).
+
+Las de Python arrancan un HA real (sin mocks) en un directorio temporal en ~2 s. El script
 termina con `os._exit` porque, en este Mac, HA 2026.9.2 con Python 3.14.7 da
 un segfault al cerrarse con cualquier entrada cargada, aunque sea de una
 integración oficial. No es de esta integración (§6 de DECISIONES, que además

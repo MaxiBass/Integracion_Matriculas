@@ -198,6 +198,32 @@ async def _falla(hass, servicio: str, datos: dict, clave: str) -> bool:
     return False
 
 
+class _ConexionWs:
+    """Lo mínimo de una conexión websocket para llamar al comando directamente."""
+
+    def __init__(self) -> None:
+        self.mensajes: list[dict] = []
+        self.subscriptions: dict = {}
+
+    def send_message(self, mensaje: dict) -> None:
+        self.mensajes.append(mensaje)
+
+    def send_result(self, iden: int, resultado=None) -> None:
+        self.mensajes.append({"id": iden, "type": "result", "success": True})
+
+    def send_error(self, iden: int, codigo: str, mensaje: str, **_kw) -> None:
+        self.mensajes.append({"id": iden, "type": "result", "success": False, "code": codigo})
+
+    def eventos(self) -> list[dict]:
+        return [m["event"] for m in self.mensajes if m.get("type") == "event"]
+
+
+def _panel(hass):
+    from homeassistant.components.frontend import DATA_PANELS
+
+    return hass.data.get(DATA_PANELS, {}).get("matriculas")
+
+
 async def _recorrido(directorio: Path) -> None:
     from homeassistant.config_entries import ConfigEntryState
     from homeassistant.exceptions import ServiceValidationError
@@ -226,6 +252,17 @@ async def _recorrido(directorio: Path) -> None:
 
         almacen = entrada.runtime_data.almacen
         detector = entrada.runtime_data.detector
+
+        # ── Panel ──
+        panel = _panel(hass)
+        comprobar(panel is not None and panel.sidebar_title == "Matrículas" and not panel.require_admin,
+                  "registra el panel «Matrículas» en la barra lateral, para todos los usuarios")
+        version = json.loads((RAIZ / "custom_components/matriculas/manifest.json").read_text("utf-8"))["version"]
+        url = (panel.config or {}).get("_panel_custom", {}).get("module_url", "") if panel else ""
+        comprobar(url.endswith(f"matriculas-panel.js?v={version}"),
+                  f"el JS del panel lleva la versión en la URL para no quedarse en caché ({url})")
+        comprobar((RAIZ / "custom_components/matriculas/frontend/matriculas-panel.js").is_file(),
+                  "el fichero del panel existe donde se sirve")
 
         # ── Importación automática ──
         comprobar(set(almacen.matriculas) == {"1234BCD", "5678FGH", "9012JKL", "3456BMX"},
@@ -270,6 +307,9 @@ async def _recorrido(directorio: Path) -> None:
                   "editar una inexistente da error visible")
         await _llamar(hass, "editar", {"matricula": "7777NBW", "caduca": "2020-01-01"})
         comprobar(almacen.matriculas["7777NBW"]["caduca"] == "2020-01-01", "acepta caducidad")
+        await _llamar(hass, "editar", {"matricula": "7777NBW", "caduca": ""})
+        comprobar(almacen.matriculas["7777NBW"]["caduca"] is None, "una caducidad vacía la quita (lo que manda el panel)")
+        await _llamar(hass, "editar", {"matricula": "7777NBW", "caduca": "2020-01-01"})
 
         # ── Buscar ──
         r = await _llamar(hass, "buscar", {"matricula": "3456RMX"}, True)
@@ -360,6 +400,36 @@ async def _recorrido(directorio: Path) -> None:
         ficha = next(f for f in r["matriculas"] if f["matricula"] == "3456BMX")
         comprobar(ficha["vista"] and ficha["vista"]["veces"] == 1, "cada ficha trae sus estadísticas")
 
+        # ── Websocket del panel ──
+        from custom_components.matriculas.websocket import ws_suscribir
+
+        ws = _ConexionWs()
+        ws_suscribir(hass, ws, {"id": 7, "type": "matriculas/suscribir"})
+        inicial = ws.eventos()
+        comprobar(ws.mensajes[0].get("success") is True and len(inicial) == 1,
+                  "suscribirse responde bien y manda los datos al momento")
+        comprobar(inicial and {"matriculas", "desconocidas", "ignoradas", "historial"} <= set(inicial[0])
+                  and len(inicial[0]["matriculas"]) == len(almacen.matriculas),
+                  "los datos traen registradas, desconocidas, ignoradas e historial")
+        comprobar(inicial and inicial[0]["historial"][0]["matricula"] == "8642HJK",
+                  "el historial llega del más reciente al más antiguo")
+        comprobar(almacen.vistas["8642HJK"].get("frigate_id") == "coche-5",
+                  "cada matrícula guarda el id de Frigate de la última vez (para la foto)")
+
+        await _llamar(hass, "guardar", {"matricula": "1122BBC", "nombre": "Por websocket"})
+        comprobar(len(ws.eventos()) == 2 and any(f["matricula"] == "1122BBC" for f in ws.eventos()[-1]["matriculas"]),
+                  "al guardar, el panel recibe los datos nuevos sin pedirlos")
+        lpr("1122BBC", 0.9, id_="coche-ws")
+        await asyncio.sleep(0.2)
+        await hass.async_block_till_done()
+        ultimo = ws.eventos()[-1]
+        comprobar(ultimo["historial"][0]["nombre"] == "Por websocket",
+                  "al cerrarse una detección, el panel recibe el historial actualizado")
+        antes_ws = len(ws.mensajes)
+        ws.subscriptions[7]()
+        await _llamar(hass, "eliminar", {"matricula": "1122BBC"})
+        comprobar(len(ws.mensajes) == antes_ws, "al cancelar la suscripción deja de recibir")
+
         # ── Importación manual: fichero roto no toca nada ──
         antes = json.dumps(almacen.matriculas, sort_keys=True)
         roto = directorio / "roto.json"
@@ -404,8 +474,15 @@ async def _recorrido(directorio: Path) -> None:
                   and not entrada.runtime_data.detector.camaras,
                   "cambiar las opciones recarga con el prefijo y las cámaras nuevas")
 
+        comprobar(_panel(hass) is not None, "tras recargar, el panel sigue registrado")
+
         # ── Sin entrada cargada ──
         await hass.config_entries.async_unload(entrada.entry_id)
+        comprobar(_panel(hass) is None, "al descargar la integración se quita el panel")
+        ws = _ConexionWs()
+        ws_suscribir(hass, ws, {"id": 8, "type": "matriculas/suscribir"})
+        comprobar(ws.mensajes and ws.mensajes[0].get("code") == "no_cargada",
+                  "sin entrada cargada, el websocket da un error claro")
         try:
             await _llamar(hass, "listar", {}, True)
             comprobar(False, "sin entrada cargada, los servicios dan error claro")
