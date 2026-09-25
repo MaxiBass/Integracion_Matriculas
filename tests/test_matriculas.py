@@ -90,6 +90,43 @@ def test_coincidencia() -> None:
               "formato español: sin vocales")
 
 
+def test_sugerencias() -> None:
+    import importlib.util
+
+    ruta = RAIZ / "custom_components" / "matriculas" / "sugerencias.py"
+    spec = importlib.util.spec_from_file_location("sugerencias", ruta)
+    su = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(su)
+
+    print("\nSugerencias — matrículas mal guardadas")
+
+    reg = {"1234BCD": {"nombre": "Abuela"}}
+    vistas = lambda lect: {"1234BCD": {"lecturas": lect}}  # noqa: E731
+
+    r = su.calcular(reg, vistas({"1234BCF": 2}))
+    comprobar(list(r) == ["correccion_1234bcd_1234bcf"] and r["correccion_1234bcd_1234bcf"]["propuesta"] == "1234BCF",
+              "leída 2 veces como otra y nunca como la guardada → sugiere corregir")
+    comprobar(not su.calcular(reg, vistas({"1234BCF": 1})), "una sola lectura distinta no basta (los errores sueltos son normales)")
+    comprobar(not su.calcular(reg, vistas({"1234BCD": 3, "1234BCF": 2})), "si la guardada se lee más, no sugiere nada")
+    comprobar(bool(su.calcular(reg, vistas({"1234BCD": 1, "1234BCF": 3}))), "si la otra domina, sí")
+    r = su.calcular({**reg, "1234BCF": {"nombre": "X"}}, vistas({"1234BCF": 3}))
+    comprobar(not any(k.startswith("correccion") for k in r) and "duplicado_1234bcd_1234bcf" in r,
+              "si la otra ya está registrada, no es una corrección sino un posible duplicado")
+    comprobar(not su.calcular(reg, vistas({"1234BCF": 3}), ["correccion_1234bcd_1234bcf"]), "las descartadas no vuelven")
+
+    dup = su.calcular({"0123KNN": {"nombre": "L"}, "0123KNW": {"nombre": "L2"}},
+                      {"0123KNW": {"lecturas": {"0123KNW": 2}}})
+    d = dup.get("duplicado_0123knn_0123knw", {})
+    comprobar(d.get("sobra") == "0123KNN", "dos registradas a un carácter → duplicado; sobra la que nunca se lee")
+    comprobar(not su.calcular({"1234BCD": {"nombre": "A"}, "1234BFF": {"nombre": "B"}}, {}),
+              "a dos caracteres no es duplicado")
+
+    lecturas = {f"000{i}AAA": 5 for i in range(8)}
+    su.anotar_lectura(lecturas, "9999ZZZ")
+    comprobar(len(lecturas) == su.MAX_LECTURAS and "9999ZZZ" in lecturas,
+              "las lecturas no crecen sin límite y nunca se pierde la recién anotada")
+
+
 # ── Flujo de configuración y traducciones ────────────────────────────
 
 
@@ -430,6 +467,97 @@ async def _recorrido(directorio: Path) -> None:
         await _llamar(hass, "eliminar", {"matricula": "1122BBC"})
         comprobar(len(ws.mensajes) == antes_ws, "al cancelar la suscripción deja de recibir")
 
+        # ── Matrículas mal guardadas ──
+        from homeassistant.components.repairs import repairs_flow_manager
+        from homeassistant.helpers import issue_registry as ir
+
+        avisos_ev: list[dict] = []
+        hass.bus.async_listen("matriculas_sugerencia", lambda e: avisos_ev.append(dict(e.data)))
+        issues = ir.async_get(hass)
+
+        def aviso(ident):
+            return issues.async_get_issue("matriculas", ident)
+
+        await _llamar(hass, "guardar", {"matricula": "4680DFG", "nombre": "Primo", "abrir": False, "notas": "n"})
+        for i in range(2):  # dos visitas en las que Frigate lee DFH
+            lpr("4680DFH", 0.9, id_=f"primo-{i}")
+            await asyncio.sleep(0.15)
+        await hass.async_block_till_done()
+        ident = "correccion_4680dfg_4680dfh"
+        comprobar(almacen.vistas["4680DFG"]["lecturas"] == {"4680DFH": 2}, "cuenta cómo la lee Frigate en cada visita")
+        comprobar(ident in almacen.sugerencias, "2 visitas leída como otra → sugerencia de corrección")
+        comprobar(aviso(ident) is not None and aviso(ident).translation_key == "correccion" and aviso(ident).is_fixable,
+                  "aparece en Ajustes → Reparaciones, con arreglo")
+        comprobar(aviso(ident) and aviso(ident).translation_placeholders.get("propuesta") == "4680 DFH",
+                  "el aviso muestra la matrícula propuesta con formato")
+        comprobar([e["id"] for e in avisos_ev] == [ident], "lanza matriculas_sugerencia una vez")
+        comprobar(hass.states.get("sensor.matriculas_registradas").attributes.get("sugerencias") == 1,
+                  "el sensor cuenta las sugerencias")
+        lpr("4680DFH", 0.9, id_="primo-2")
+        await asyncio.sleep(0.15)
+        await hass.async_block_till_done()
+        comprobar(len(avisos_ev) == 1 and aviso(ident).translation_placeholders["veces_propuesta"] == "3",
+                  "otra visita actualiza las cifras del aviso sin repetir el evento")
+
+        # Arreglo desde Reparaciones: menú → corregir
+        fm = repairs_flow_manager(hass)
+        r = await fm.async_init("matriculas", data={"issue_id": ident})
+        comprobar(r["type"] == "menu" and list(r["menu_options"]) == ["corregir", "otro_coche", "descartar"],
+                  f"el arreglo ofrece corregir, otro coche o descartar ({r.get('type')})")
+        r = await fm.async_configure(r["flow_id"], {"next_step_id": "corregir"})
+        await hass.async_block_till_done()
+        ficha = almacen.matriculas.get("4680DFH", {})
+        comprobar(r["type"] == "create_entry" and "4680DFG" not in almacen.matriculas
+                  and ficha.get("nombre") == "Primo" and ficha.get("abrir") is False and ficha.get("notas") == "n",
+                  "corregir renombra conservando nombre y permisos")
+        comprobar(almacen.vistas.get("4680DFH", {}).get("veces") == 3, "y las estadísticas")
+        comprobar(aviso(ident) is None and not almacen.sugerencias, "el aviso desaparece")
+
+        # «Es otro coche»: se registra aparte, sin abrir, y no aparece como duplicado
+        await _llamar(hass, "guardar", {"matricula": "5791FGH", "nombre": "Tía"})
+        for i in range(2):
+            lpr("5791FGJ", 0.9, id_=f"tia-{i}")
+            await asyncio.sleep(0.15)
+        await hass.async_block_till_done()
+        ident2 = "correccion_5791fgh_5791fgj"
+        antes_ev = len(avisos_ev)
+        await _llamar(hass, "resolver_sugerencia", {"id": ident2, "accion": "otro_coche", "nombre": "Casa del 5"})
+        otro = almacen.matriculas.get("5791FGJ", {})
+        comprobar(otro.get("nombre") == "Casa del 5" and otro.get("avisar") is True and otro.get("abrir") is False,
+                  "«es otro coche» lo registra aparte: avisa, pero no abre por defecto")
+        comprobar(not almacen.sugerencias and len(avisos_ev) == antes_ev and aviso("duplicado_5791fgh_5791fgj") is None,
+                  "y no lo vuelve a presentar como duplicado de la otra")
+        lpr("5791FGJ", 0.9, id_="tia-2")
+        await asyncio.sleep(0.15)
+        await hass.async_block_till_done()
+        comprobar(almacen.vistas.get("5791FGJ", {}).get("veces") == 1, "desde entonces se le reconoce como él mismo")
+
+        # Duplicado: dos casi iguales
+        await _llamar(hass, "guardar", {"matricula": "6802GHJ", "nombre": "Laura"})
+        await _llamar(hass, "guardar", {"matricula": "6802GHK", "nombre": "Laura bis"})
+        ident3 = "duplicado_6802ghj_6802ghk"
+        comprobar(aviso(ident3) is not None and aviso(ident3).translation_key == "duplicado",
+                  "dos registradas a un carácter → aviso de duplicado")
+        r = await fm.async_init("matriculas", data={"issue_id": ident3})
+        comprobar(list(r["menu_options"]) == ["eliminar_primera", "eliminar_segunda", "descartar"],
+                  "el arreglo ofrece eliminar una u otra, o descartar")
+        r = await fm.async_configure(r["flow_id"], {"next_step_id": "eliminar_segunda"})
+        comprobar("6802GHK" not in almacen.matriculas and "6802GHJ" in almacen.matriculas and aviso(ident3) is None,
+                  "eliminar la segunda la borra y quita el aviso")
+
+        # Descartar: no vuelve, ni tras recargar
+        await _llamar(hass, "guardar", {"matricula": "6802GHK", "nombre": "Otra Laura"})
+        await _llamar(hass, "resolver_sugerencia", {"id": ident3, "accion": "descartar"})
+        comprobar(aviso(ident3) is None and ident3 in almacen.descartadas, "descartar quita el aviso y lo recuerda")
+        comprobar(await _falla(hass, "resolver_sugerencia", {"id": ident3, "accion": "descartar"}, "sugerencia_no_existe"),
+                  "una sugerencia ya resuelta da error claro")
+
+        # Reconstrucción de lecturas para datos de versiones anteriores
+        del almacen.vistas["1234BCD"]["lecturas"]
+        almacen._reconstruir_lecturas()
+        comprobar(almacen.vistas["1234BCD"]["lecturas"] == {"1234BCD": 1},
+                  "las lecturas de datos antiguos se reconstruyen desde el historial")
+
         # ── Importación manual: fichero roto no toca nada ──
         antes = json.dumps(almacen.matriculas, sort_keys=True)
         roto = directorio / "roto.json"
@@ -445,9 +573,17 @@ async def _recorrido(directorio: Path) -> None:
         comprobar(r["sin_cambios"] == 4 and almacen.matriculas["1234BCD"]["abrir"] is False
                   and "7777NBW" in almacen.matriculas,
                   f"importar fusionando conserva «puede abrir» y las que no están en el fichero ({r})")
+        sobran = set(almacen.matriculas) - {"1234BCD", "5678FGH", "9012JKL", "3456BMX"}
         r = await _llamar(hass, "importar", {"reemplazar": True}, True)
-        comprobar(r["borradas"] == 1 and "7777NBW" not in almacen.matriculas,
-                  "importar reemplazando borra las que no están en el fichero")
+        comprobar(r["borradas"] == len(sobran) and "7777NBW" not in almacen.matriculas
+                  and set(almacen.matriculas) == {"1234BCD", "5678FGH", "9012JKL", "3456BMX"},
+                  f"importar reemplazando borra las que no están en el fichero ({r['borradas']})")
+
+        # Un duplicado vivo, para comprobar la recarga
+        await _llamar(hass, "guardar", {"matricula": "7913HJK", "nombre": "Pendiente"})
+        await _llamar(hass, "guardar", {"matricula": "7913HJL", "nombre": "Pendiente bis"})
+        await hass.async_block_till_done()  # el evento llega a los oyentes un instante después
+        eventos_antes_recarga = len(avisos_ev)
 
         # ── Persistencia tras recargar ──
         await _llamar(hass, "guardar", {"matricula": "1357CDF", "nombre": "Persistente", "notas": "hola"})
@@ -459,6 +595,9 @@ async def _recorrido(directorio: Path) -> None:
                   "las matrículas sobreviven a recargar la integración")
         comprobar(nuevo.vistas.get("8642HJK", {}).get("veces") == 2,
                   "las estadísticas también (se vuelcan al descargar)")
+        comprobar(aviso("duplicado_7913hjk_7913hjl") is not None and len(avisos_ev) == eventos_antes_recarga,
+                  f"al recargar, el aviso sigue ahí y el evento no se repite ({eventos_antes_recarga}→{len(avisos_ev)})")
+        comprobar("duplicado_6802ghj_6802ghk" in nuevo.descartadas, "las descartadas sobreviven a la recarga")
         comprobar(not nuevo.es_nuevo and "1234BCD" in nuevo.matriculas
                   and nuevo.matriculas["1234BCD"]["abrir"] is False,
                   "al recargar no se reimporta el plates.json")
@@ -479,6 +618,8 @@ async def _recorrido(directorio: Path) -> None:
         # ── Sin entrada cargada ──
         await hass.config_entries.async_unload(entrada.entry_id)
         comprobar(_panel(hass) is None, "al descargar la integración se quita el panel")
+        comprobar(not [i for (d, i) in issues.issues if d == "matriculas"],
+                  "y sus avisos de Reparaciones (sin ella no se pueden resolver)")
         ws = _ConexionWs()
         ws_suscribir(hass, ws, {"id": 8, "type": "matriculas/suscribir"})
         comprobar(ws.mensajes and ws.mensajes[0].get("code") == "no_cargada",
@@ -514,6 +655,7 @@ def test_home_assistant() -> None:
 
 if __name__ == "__main__":
     test_coincidencia()
+    test_sugerencias()
     try:
         test_flujo_y_traducciones()
     except ImportError as err:

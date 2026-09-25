@@ -32,15 +32,17 @@
   const q = new URLSearchParams(location.search);
   if (q.get("tema") === "oscuro") document.documentElement.classList.add("oscuro");
 
-  await import("../custom_components/matriculas/frontend/matriculas-panel.js")
-    .catch(() => import("./matriculas-panel.js"));
+  // Marca de tiempo: sin ella el navegador reutiliza el módulo de la caché.
+  const t = Date.now();
+  await import(`../custom_components/matriculas/frontend/matriculas-panel.js?t=${t}`)
+    .catch(() => import(`./matriculas-panel.js?t=${t}`));
 
   const hace = (h) => new Date(Date.now() - h * 3600e3).toISOString();
   const ficha = (matricula, nombre, extra = {}) => ({
     matricula, nombre, avisar: true, abrir: true, notas: "", caduca: null,
     creada: hace(900), modificada: hace(900), vista: null, ...extra,
   });
-  const datos = q.get("vacio") ? { matriculas: [], desconocidas: [], ignoradas: [], historial: [] } : {
+  const datos = q.get("vacio") ? { matriculas: [], desconocidas: [], ignoradas: [], historial: [], sugerencias: [] } : {
     matriculas: [
       ficha("1234BCD", "Abuela", { vista: { primera: hace(500), ultima: hace(3), veces: 41, frigate_id: "demo-1" } }),
       ficha("5678FGH", "Reparto", { avisar: false, abrir: false, vista: { primera: hace(400), ultima: hace(30), veces: 12, frigate_id: "demo-2" } }),
@@ -48,12 +50,19 @@
       ficha("3456BMX", "Fontanero", { caduca: "2026-12-31" }),
       ficha("7777NBV", "Jardinería", { caduca: "2026-01-15", abrir: false }),
       ficha("2468DFG", "Nombre muy largo de una persona con dos apellidos y un apodo", {}),
+      ficha("5678FGJ", "Reparto (repetida)", {}),
     ],
     desconocidas: [
       { matricula: "8642HJK", primera: hace(200), ultima: hace(5), veces: 4, camara: "Videoportero-Sub", frigate_id: "demo-3" },
       { matricula: "1357CDF", primera: hace(100), ultima: hace(50), veces: 1, camara: "Videoportero-Sub", frigate_id: "caducada" },
     ],
     ignoradas: [{ matricula: "9999ZZZ", desde: hace(700) }],
+    sugerencias: [
+      { id: "correccion_9012jkl_9012jkm", tipo: "correccion", matricula: "9012JKL", propuesta: "9012JKM",
+        nombre: "Tío Ramón", veces_propuesta: 3, veces_guardada: 0 },
+      { id: "duplicado_5678fgh_5678fgj", tipo: "duplicado", matricula: "5678FGH", otra: "5678FGJ",
+        nombre: "Reparto", nombre_otra: "Reparto (repetida)", veces: 12, veces_otra: 0, sobra: "5678FGJ" },
+    ],
     historial: [
       { hora: hace(3), matricula: "1234BCD", leida: "1234BCD", tipo: "conocida", nombre: "Abuela", aproximada: false, score: 0.93, camara: "Videoportero-Sub", frigate_id: "demo-1" },
       { hora: hace(5), matricula: "8642HJK", leida: "8642HJK", tipo: "desconocida", nombre: "", aproximada: false, score: 0.88, camara: "Videoportero-Sub", frigate_id: "demo-3" },
@@ -101,6 +110,18 @@
       } else if (service === "ignorar") {
         datos.desconocidas = datos.desconocidas.filter((v) => v.matricula !== m);
         datos.ignoradas.push({ matricula: m, desde: new Date().toISOString() });
+      } else if (service === "resolver_sugerencia") {
+        const s = datos.sugerencias.find((x) => x.id === d.id);
+        if (!s) return error("sugerencia_no_existe");
+        if (d.accion === "corregir") {
+          const f = datos.matriculas.find((x) => x.matricula === s.matricula);
+          f.matricula = s.propuesta;
+        } else if (d.accion === "otro_coche") {
+          datos.matriculas.push(ficha(s.propuesta, d.nombre, { avisar: d.avisar, abrir: d.abrir, notas: d.notas ?? "" }));
+        } else if (d.accion === "eliminar") {
+          datos.matriculas = datos.matriculas.filter((x) => x.matricula !== norma(d.matricula));
+        }
+        datos.sugerencias = datos.sugerencias.filter((x) => x.id !== d.id);
       } else if (service === "dejar_de_ignorar") {
         datos.ignoradas = datos.ignoradas.filter((v) => v.matricula !== m);
       }

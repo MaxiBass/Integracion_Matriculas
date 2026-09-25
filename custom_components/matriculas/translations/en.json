@@ -43,6 +43,9 @@
           },
           "caducadas": {
             "name": "Expired"
+          },
+          "sugerencias": {
+            "name": "Suggestions"
           }
         }
       }
@@ -90,6 +93,12 @@
     },
     "no_cargada": {
       "message": "The License plates integration is not loaded."
+    },
+    "sugerencia_no_existe": {
+      "message": "That suggestion no longer exists: it may have been resolved already."
+    },
+    "accion_invalida": {
+      "message": "That action does not apply to this suggestion."
     }
   },
   "services": {
@@ -212,6 +221,98 @@
         "reemplazar": {
           "name": "Replace",
           "description": "Also deletes the plates that are not in the file."
+        }
+      }
+    },
+    "resolver_sugerencia": {
+      "name": "Resolve suggestion",
+      "description": "Applies an option to a wrongly-stored plate suggestion: correct it, register the reading as another car, delete one of two nearly identical plates or dismiss it.",
+      "fields": {
+        "id": {
+          "name": "Suggestion",
+          "description": "Suggestion id (shown in the panel, the matriculas_sugerencia event and the repair)."
+        },
+        "accion": {
+          "name": "Action",
+          "description": "corregir, otro_coche, eliminar or descartar."
+        },
+        "matricula": {
+          "name": "Plate",
+          "description": "With eliminar: which of the two duplicated plates."
+        },
+        "nombre": {
+          "name": "Name",
+          "description": "With otro_coche: name of the other car."
+        },
+        "avisar": {
+          "name": "Notify",
+          "description": "With otro_coche. Defaults to yes."
+        },
+        "abrir": {
+          "name": "Can open",
+          "description": "With otro_coche. Defaults to no."
+        },
+        "notas": {
+          "name": "Notes",
+          "description": "With otro_coche."
+        },
+        "caduca": {
+          "name": "Expires",
+          "description": "With otro_coche."
+        }
+      }
+    }
+  },
+  "issues": {
+    "correccion": {
+      "title": "Is {matricula} stored wrongly?",
+      "description": "{nombre} is stored as {matricula}, but Frigate has read it {veces_propuesta} times as {propuesta} and {veces_guardada} as {matricula}.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Is {matricula} stored wrongly?",
+            "description": "{nombre} is stored as **{matricula}**, but Frigate has read it **{veces_propuesta} times as {propuesta}** and {veces_guardada} as {matricula}. This usually happens when a wrong first reading was saved.\n\nIf {propuesta} is another car, register it separately: until you do, it is recognised as {nombre}.",
+            "menu_options": {
+              "corregir": "Correct it to {propuesta} (keeps name, permissions and statistics)",
+              "otro_coche": "{propuesta} is another car: register it separately",
+              "descartar": "It is fine as it is: do not suggest it again"
+            }
+          },
+          "otro_coche": {
+            "title": "Register {propuesta}",
+            "description": "{propuesta} is a different car from {nombre} ({matricula}). By default it cannot open the gate.",
+            "data": {
+              "nombre": "Name",
+              "avisar": "Notify when it arrives",
+              "abrir": "Can open the gate"
+            }
+          }
+        },
+        "abort": {
+          "ya_resuelta": "This suggestion no longer applies."
+        },
+        "error": {
+          "nombre_vacio": "The name is missing."
+        }
+      }
+    },
+    "duplicado": {
+      "title": "Are {matricula} and {otra} the same car?",
+      "description": "{nombre} ({matricula}) and {nombre_otra} ({otra}) differ in a single character.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Are {matricula} and {otra} the same car?",
+            "description": "**{nombre}** ({matricula}) and **{nombre_otra}** ({otra}) differ in a single character. Frigate has read {matricula} {veces} times and {otra} {veces_otra}.\n\nIf they are the same car, delete the wrong one: with two nearly identical plates, a doubtful reading matches neither.",
+            "menu_options": {
+              "eliminar_primera": "Delete {matricula} ({nombre})",
+              "eliminar_segunda": "Delete {otra} ({nombre_otra})",
+              "descartar": "They are different cars: do not suggest it again"
+            }
+          }
+        },
+        "abort": {
+          "ya_resuelta": "This suggestion no longer applies."
         }
       }
     }

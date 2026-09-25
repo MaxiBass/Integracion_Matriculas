@@ -96,3 +96,39 @@ importar:
       default: false
       selector:
         boolean:
+
+resolver_sugerencia:
+  fields:
+    id:
+      required: true
+      example: correccion_1234bcd_1234bcf
+      selector:
+        text:
+    accion:
+      required: true
+      selector:
+        select:
+          options:
+            - corregir
+            - otro_coche
+            - eliminar
+            - descartar
+    matricula:
+      selector:
+        text:
+    nombre:
+      selector:
+        text:
+    avisar:
+      selector:
+        boolean:
+    abrir:
+      selector:
+        boolean:
+    notas:
+      selector:
+        text:
+          multiline: true
+    caduca:
+      selector:
+        date:

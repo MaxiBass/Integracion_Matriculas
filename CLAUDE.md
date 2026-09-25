@@ -27,6 +27,8 @@ Es **público** a propósito, porque HACS no lee repos privados (ver
 ```
 custom_components/matriculas/
   coincidencia.py   tolerancia a errores de OCR; no importa nada de HA
+  sugerencias.py    detección de matrículas mal guardadas; tampoco importa HA
+  repairs.py        arreglo de esas sugerencias desde Ajustes → Reparaciones
   almacen.py        registro + detecciones en .storage, importación del legado
   detector.py       suscripción MQTT a Frigate, deduplicación por coche
   __init__.py       alta de la entrada y servicios
@@ -47,6 +49,9 @@ En particular:
 - Una coincidencia **aproximada sí abre** la puerta. Es decisión de Maxi, no
   un fallo (§4).
 - El `plates.json` antiguo **nunca se modifica** desde aquí.
+- Las sugerencias de matrículas mal guardadas **nunca se aplican solas** (§10).
+- Ojo con los ejemplos: en tests y documentación, solo matrículas inventadas.
+  Ya se coló una real en una prueba y hubo que cambiarla.
 
 ## Flujo para editar
 

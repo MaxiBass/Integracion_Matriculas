@@ -54,6 +54,7 @@ SERVICIO_DEJAR_DE_IGNORAR = "dejar_de_ignorar"
 SERVICIO_BUSCAR = "buscar"
 SERVICIO_LISTAR = "listar"
 SERVICIO_IMPORTAR = "importar"
+SERVICIO_RESOLVER_SUGERENCIA = "resolver_sugerencia"
 
 _FECHA_O_VACIO = vol.Any(None, "", cv.date)
 
@@ -72,6 +73,18 @@ ESQUEMA_EDITAR = vol.Schema(
     {
         vol.Required("matricula"): cv.string,
         vol.Optional("nueva_matricula"): cv.string,
+        vol.Optional("nombre"): cv.string,
+        vol.Optional("avisar"): cv.boolean,
+        vol.Optional("abrir"): cv.boolean,
+        vol.Optional("notas"): cv.string,
+        vol.Optional("caduca"): _FECHA_O_VACIO,
+    }
+)
+ESQUEMA_RESOLVER_SUGERENCIA = vol.Schema(
+    {
+        vol.Required("id"): cv.string,
+        vol.Required("accion"): vol.In(["corregir", "otro_coche", "eliminar", "descartar"]),
+        vol.Optional("matricula"): cv.string,
         vol.Optional("nombre"): cv.string,
         vol.Optional("avisar"): cv.boolean,
         vol.Optional("abrir"): cv.boolean,
@@ -115,6 +128,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EntradaMatriculas) -> bo
             except ServiceValidationError as err:
                 # Sin guardar nada: el próximo arranque lo vuelve a intentar.
                 _LOGGER.error("No se pudo importar %s: %s", ruta, err)
+    almacen.recalcular_sugerencias(inicio=True)
 
     opciones = {**entry.data, **entry.options}
     detector = Detector(
@@ -141,6 +155,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: EntradaMatriculas) -> b
     if descargada:
         frontend.async_remove_panel(hass, URL_PANEL, warn_if_unknown=False)
         await entry.runtime_data.detector.async_parar()
+        entry.runtime_data.almacen.quitar_avisos()
         await entry.runtime_data.almacen.async_volcar()
     return descargada
 
@@ -232,6 +247,19 @@ def _registrar_servicios(hass: HomeAssistant) -> None:
     async def listar(call: ServiceCall) -> ServiceResponse:
         return _almacen(hass).instantanea()
 
+    async def resolver_sugerencia(call: ServiceCall) -> None:
+        d = call.data
+        await _almacen(hass).async_resolver_sugerencia(
+            d["id"],
+            d["accion"],
+            matricula=d.get("matricula"),
+            nombre=d.get("nombre"),
+            avisar=d.get("avisar"),
+            abrir=d.get("abrir"),
+            notas=d.get("notas"),
+            caduca=d.get("caduca", SIN_CAMBIO),
+        )
+
     async def importar(call: ServiceCall) -> ServiceResponse:
         ruta = call.data.get("ruta") or hass.config.path(RUTA_LEGADO)
         return await _almacen(hass).async_importar(
@@ -247,3 +275,4 @@ def _registrar_servicios(hass: HomeAssistant) -> None:
     registro(DOMAIN, SERVICIO_BUSCAR, buscar, ESQUEMA_MATRICULA, SupportsResponse.ONLY)
     registro(DOMAIN, SERVICIO_LISTAR, listar, vol.Schema({}), SupportsResponse.ONLY)
     registro(DOMAIN, SERVICIO_IMPORTAR, importar, ESQUEMA_IMPORTAR, SupportsResponse.OPTIONAL)
+    registro(DOMAIN, SERVICIO_RESOLVER_SUGERENCIA, resolver_sugerencia, ESQUEMA_RESOLVER_SUGERENCIA)

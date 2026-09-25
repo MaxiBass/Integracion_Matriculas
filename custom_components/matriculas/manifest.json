@@ -1,7 +1,7 @@
 {
   "domain": "matriculas",
   "name": "Matrículas",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "documentation": "https://github.com/MaxiBass/Integracion_Matriculas",
   "issue_tracker": "https://github.com/MaxiBass/Integracion_Matriculas/issues",
   "requirements": [],
@@ -9,6 +9,7 @@
     "frontend",
     "http",
     "panel_custom",
+    "repairs",
     "websocket_api"
   ],
   "after_dependencies": [

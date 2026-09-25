@@ -23,11 +23,12 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from . import coincidencia
+from . import coincidencia, sugerencias
 from .const import (
     CADUCADA,
     CLAVE_DETECCIONES,
@@ -35,6 +36,7 @@ from .const import (
     CONOCIDA,
     DESCONOCIDA,
     DOMAIN,
+    EVENTO_SUGERENCIA,
     HISTORIAL_PANEL,
     IGNORADA,
     LONGITUD_MAXIMA,
@@ -84,6 +86,19 @@ def _fecha(valor: Any) -> str | None:
     return date.fromisoformat(str(valor)).isoformat()
 
 
+def formato_placa(matricula: str) -> str:
+    return f"{matricula[:4]} {matricula[4:]}" if coincidencia.es_formato_espanol(matricula) else matricula
+
+
+def marcadores_sugerencia(s: dict[str, Any]) -> dict[str, str]:
+    """Textos para los avisos de Reparaciones (todo cadenas, matrículas con espacio)."""
+    marcadores = {k: str(v) for k, v in s.items() if k not in ("id", "tipo")}
+    for clave in ("matricula", "propuesta", "otra", "sobra"):
+        if s.get(clave):
+            marcadores[clave] = formato_placa(s[clave])
+    return marcadores
+
+
 def caducada(datos: dict[str, Any], hoy: date) -> bool:
     caduca = datos.get("caduca")
     return bool(caduca) and date.fromisoformat(caduca) < hoy
@@ -106,6 +121,12 @@ class Almacen:
         self.historial: list[dict[str, Any]] = []
         self.importado_de: str | None = None
         self.es_nuevo = False
+        # Sugerencias de matrículas mal guardadas (sugerencias.py). Las
+        # descartadas son decisión de alguien: van con el registro. Las ya
+        # avisadas, con las detecciones, para no repetir el evento al reiniciar.
+        self.sugerencias: dict[str, dict[str, Any]] = {}
+        self.descartadas: set[str] = set()
+        self.avisadas: set[str] = set()
 
     # ── Carga y guardado ──────────────────────────────────────────────
 
@@ -116,24 +137,149 @@ class Almacen:
         self.matriculas = registro.get("matriculas", {})
         self.ignoradas = registro.get("ignoradas", {})
         self.importado_de = registro.get("importado_de")
+        self.descartadas = set(registro.get("sugerencias_descartadas", []))
 
         detecciones = await self._store_detecciones.async_load() or {}
         self.vistas = detecciones.get("vistas", {})
         self.historial = detecciones.get("historial", [])
+        self.avisadas = set(detecciones.get("sugerencias_avisadas", []))
+        self._reconstruir_lecturas()
+
+    def _reconstruir_lecturas(self) -> None:
+        """Las versiones anteriores a la 0.3.0 no contaban las lecturas de cada
+        matrícula: se sacan del historial la primera vez."""
+        faltan = {m for m, v in self.vistas.items() if "lecturas" not in v}
+        if not faltan:
+            return
+        for m in faltan:
+            self.vistas[m]["lecturas"] = {}
+        for entrada in self.historial:
+            if entrada.get("matricula") in faltan and entrada.get("leida"):
+                sugerencias.anotar_lectura(self.vistas[entrada["matricula"]]["lecturas"], entrada["leida"])
 
     def _datos_registro(self) -> dict[str, Any]:
         return {
             "matriculas": self.matriculas,
             "ignoradas": self.ignoradas,
             "importado_de": self.importado_de,
+            "sugerencias_descartadas": sorted(self.descartadas),
         }
 
     def _datos_detecciones(self) -> dict[str, Any]:
-        return {"vistas": self.vistas, "historial": self.historial}
+        return {
+            "vistas": self.vistas,
+            "historial": self.historial,
+            "sugerencias_avisadas": sorted(self.avisadas),
+        }
 
     async def _async_guardar_registro(self) -> None:
         await self._store_registro.async_save(self._datos_registro())
+        self.recalcular_sugerencias()
         async_dispatcher_send(self.hass, SENAL_REGISTRO)
+
+    # ── Sugerencias ───────────────────────────────────────────────────
+
+    @callback
+    def recalcular_sugerencias(self, *, inicio: bool = False) -> None:
+        """Recalcula las sugerencias y sincroniza los avisos de Reparaciones.
+
+        Barato: 43 matrículas son ~900 comparaciones de 7 caracteres.
+        """
+        nuevas = sugerencias.calcular(self.matriculas, self.vistas, self.descartadas)
+        registro = ir.async_get(self.hass)
+        if inicio:
+            # Avisos de una ejecución anterior que ya no aplican.
+            for dominio, ident in list(registro.issues):
+                if dominio == DOMAIN and ident not in nuevas:
+                    ir.async_delete_issue(self.hass, DOMAIN, ident)
+        for ident in set(self.sugerencias) - set(nuevas):
+            ir.async_delete_issue(self.hass, DOMAIN, ident)
+            self.avisadas.discard(ident)
+        cambio_avisadas = False
+        for ident, s in nuevas.items():
+            # También si cambian las cifras, para que el aviso no las muestre viejas.
+            if inicio or self.sugerencias.get(ident) != s:
+                self._crear_aviso(s)
+            if ident not in self.avisadas:
+                self.avisadas.add(ident)
+                cambio_avisadas = True
+                self.hass.bus.async_fire(EVENTO_SUGERENCIA, s)
+        self.sugerencias = nuevas
+        if cambio_avisadas:
+            self._store_detecciones.async_delay_save(
+                self._datos_detecciones, SEGUNDOS_GUARDADO_DETECCIONES
+            )
+
+    @callback
+    def _crear_aviso(self, s: dict[str, Any]) -> None:
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            s["id"],
+            is_fixable=True,
+            is_persistent=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=s["tipo"],
+            translation_placeholders=marcadores_sugerencia(s),
+            data={"id": s["id"]},
+        )
+
+    @callback
+    def quitar_avisos(self) -> None:
+        """Al descargar la integración: sin ella, los avisos no se pueden resolver."""
+        for ident in self.sugerencias:
+            ir.async_delete_issue(self.hass, DOMAIN, ident)
+
+    async def async_resolver_sugerencia(
+        self,
+        ident: str,
+        accion: str,
+        *,
+        matricula: str | None = None,
+        nombre: str | None = None,
+        avisar: bool | None = None,
+        abrir: bool | None = None,
+        notas: str | None = None,
+        caduca: Any = SIN_CAMBIO,
+    ) -> None:
+        """Aplica una de las opciones de una sugerencia.
+
+        Corrección: `corregir` (renombra la guardada a la propuesta, con su
+        nombre, permisos y estadísticas), `otro_coche` (registra la propuesta
+        como otro coche, por defecto sin «puede abrir») o `descartar`.
+        Duplicado: `eliminar` (con `matricula`, una de las dos) o `descartar`.
+        """
+        s = self.sugerencias.get(ident)
+        if s is None:
+            raise _error("sugerencia_no_existe")
+        tipo = s["tipo"]
+        if accion == "descartar":
+            self.descartadas.add(ident)
+            await self._async_guardar_registro()
+        elif tipo == sugerencias.CORRECCION and accion == "corregir":
+            await self.async_editar(s["matricula"], nueva_matricula=s["propuesta"])
+        elif tipo == sugerencias.CORRECCION and accion == "otro_coche":
+            if not nombre or not str(nombre).strip():
+                raise _error("nombre_vacio")
+            # Si no, al registrarla aparecería como duplicado de la guardada.
+            self.descartadas.add(ident)
+            a, b = sorted((s["matricula"], s["propuesta"]))
+            self.descartadas.add(sugerencias.id_sugerencia(sugerencias.DUPLICADO, a, b))
+            await self.async_guardar(
+                s["propuesta"],
+                nombre,
+                avisar=True if avisar is None else avisar,
+                abrir=False if abrir is None else abrir,
+                notas=notas,
+                caduca=caduca,
+            )
+        elif tipo == sugerencias.DUPLICADO and accion == "eliminar":
+            elegida = validar_matricula(matricula or "")
+            if elegida not in (s["matricula"], s["otra"]):
+                raise _error("accion_invalida")
+            await self.async_eliminar(elegida)
+        else:
+            raise _error("accion_invalida")
 
     async def async_volcar(self) -> None:
         """Escribe ya las detecciones pendientes (al descargar la entrada)."""
@@ -168,6 +314,7 @@ class Almacen:
             "ignoradas": [{"matricula": m, **v} for m, v in sorted(self.ignoradas.items())],
             "desconocidas": desconocidas,
             "historial": self.historial[-HISTORIAL_PANEL:][::-1],
+            "sugerencias": sorted(self.sugerencias.values(), key=lambda s: s["id"]),
         }
 
     def resolver(self, leida: str) -> dict[str, Any]:
@@ -405,9 +552,13 @@ class Almacen:
         # Para la foto de la última vez en el panel.
         vista["frigate_id"] = entrada.get("frigate_id", "")
         vista["leida"] = entrada.get("leida", clave)
+        # Cómo la leyó Frigate en esta visita: la base de las sugerencias.
+        sugerencias.anotar_lectura(vista.setdefault("lecturas", {}), entrada.get("leida", clave))
         self.historial.append(entrada)
         del self.historial[:-MAX_HISTORIAL]
         self._store_detecciones.async_delay_save(
             self._datos_detecciones, SEGUNDOS_GUARDADO_DETECCIONES
         )
+        if clave in self.matriculas:
+            self.recalcular_sugerencias()
         async_dispatcher_send(self.hass, SENAL_ESTADISTICAS)

@@ -12,7 +12,7 @@ from homeassistant.util import dt as dt_util
 
 from . import EntradaMatriculas
 from .almacen import Almacen, caducada
-from .const import SENAL_REGISTRO
+from .const import SENAL_ESTADISTICAS, SENAL_REGISTRO
 from .entity import EntidadMatriculas
 
 
@@ -33,9 +33,11 @@ class SensorRegistradas(EntidadMatriculas, SensorEntity):
         self._almacen = almacen
 
     async def async_added_to_hass(self) -> None:
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SENAL_REGISTRO, self._al_cambiar)
-        )
+        # Las sugerencias cambian también con las detecciones.
+        for senal in (SENAL_REGISTRO, SENAL_ESTADISTICAS):
+            self.async_on_remove(
+                async_dispatcher_connect(self.hass, senal, self._al_cambiar)
+            )
 
     @callback
     def _al_cambiar(self) -> None:
@@ -50,6 +52,7 @@ class SensorRegistradas(EntidadMatriculas, SensorEntity):
         hoy = dt_util.now().date()
         return {
             "ignoradas": len(self._almacen.ignoradas),
+            "sugerencias": len(self._almacen.sugerencias),
             "caducadas": sum(
                 caducada(d, hoy) for d in self._almacen.matriculas.values()
             ),

@@ -43,6 +43,9 @@
           },
           "caducadas": {
             "name": "Caducadas"
+          },
+          "sugerencias": {
+            "name": "Sugerencias"
           }
         }
       }
@@ -90,6 +93,12 @@
     },
     "no_cargada": {
       "message": "La integración Matrículas no está cargada."
+    },
+    "sugerencia_no_existe": {
+      "message": "Esa sugerencia ya no existe: puede que ya se haya resuelto."
+    },
+    "accion_invalida": {
+      "message": "Esa acción no vale para esta sugerencia."
     }
   },
   "services": {
@@ -212,6 +221,98 @@
         "reemplazar": {
           "name": "Reemplazar",
           "description": "Además borra las matrículas que no estén en el fichero."
+        }
+      }
+    },
+    "resolver_sugerencia": {
+      "name": "Resolver sugerencia",
+      "description": "Aplica una opción a una sugerencia de matrícula mal guardada: corregirla, registrar la lectura como otro coche, eliminar una de dos casi iguales o descartarla.",
+      "fields": {
+        "id": {
+          "name": "Sugerencia",
+          "description": "Id de la sugerencia (está en el panel, en el evento matriculas_sugerencia y en el aviso)."
+        },
+        "accion": {
+          "name": "Acción",
+          "description": "corregir, otro_coche, eliminar o descartar."
+        },
+        "matricula": {
+          "name": "Matrícula",
+          "description": "Con eliminar: cuál de las dos del duplicado."
+        },
+        "nombre": {
+          "name": "Nombre",
+          "description": "Con otro_coche: nombre del otro coche."
+        },
+        "avisar": {
+          "name": "Avisar",
+          "description": "Con otro_coche. Por defecto sí."
+        },
+        "abrir": {
+          "name": "Puede abrir",
+          "description": "Con otro_coche. Por defecto no."
+        },
+        "notas": {
+          "name": "Notas",
+          "description": "Con otro_coche."
+        },
+        "caduca": {
+          "name": "Caduca",
+          "description": "Con otro_coche."
+        }
+      }
+    }
+  },
+  "issues": {
+    "correccion": {
+      "title": "¿{matricula} está mal guardada?",
+      "description": "{nombre} está guardada como {matricula}, pero Frigate la ha leído {veces_propuesta} veces como {propuesta} y {veces_guardada} como {matricula}.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "¿{matricula} está mal guardada?",
+            "description": "{nombre} está guardada como **{matricula}**, pero Frigate la ha leído **{veces_propuesta} veces como {propuesta}** y {veces_guardada} como {matricula}. Suele pasar cuando se guarda una primera lectura errónea.\n\nSi {propuesta} es otro coche, regístralo aparte: mientras no lo hagas, se le reconoce como {nombre}.",
+            "menu_options": {
+              "corregir": "Corregir a {propuesta} (conserva nombre, permisos y estadísticas)",
+              "otro_coche": "{propuesta} es otro coche: registrarlo aparte",
+              "descartar": "Está bien así: no volver a sugerirlo"
+            }
+          },
+          "otro_coche": {
+            "title": "Registrar {propuesta}",
+            "description": "{propuesta} es un coche distinto de {nombre} ({matricula}). Por defecto no puede abrir la puerta.",
+            "data": {
+              "nombre": "Nombre",
+              "avisar": "Avisar cuando llegue",
+              "abrir": "Puede abrir la puerta"
+            }
+          }
+        },
+        "abort": {
+          "ya_resuelta": "Esta sugerencia ya no aplica."
+        },
+        "error": {
+          "nombre_vacio": "Falta el nombre."
+        }
+      }
+    },
+    "duplicado": {
+      "title": "¿{matricula} y {otra} son el mismo coche?",
+      "description": "{nombre} ({matricula}) y {nombre_otra} ({otra}) se diferencian en un solo carácter.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "¿{matricula} y {otra} son el mismo coche?",
+            "description": "**{nombre}** ({matricula}) y **{nombre_otra}** ({otra}) se diferencian en un solo carácter. Frigate ha leído {matricula} {veces} veces y {otra} {veces_otra}.\n\nSi son el mismo coche, elimina la que esté mal: con dos matrículas casi iguales, una lectura dudosa no reconoce ninguna.",
+            "menu_options": {
+              "eliminar_primera": "Eliminar {matricula} ({nombre})",
+              "eliminar_segunda": "Eliminar {otra} ({nombre_otra})",
+              "descartar": "Son coches distintos: no volver a sugerirlo"
+            }
+          }
+        },
+        "abort": {
+          "ya_resuelta": "Esta sugerencia ya no aplica."
         }
       }
     }

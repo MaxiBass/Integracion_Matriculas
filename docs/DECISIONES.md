@@ -191,7 +191,57 @@ lateral abierta. `.icono { display: inline-flex }` ganaba al atributo
 lógica que el `ha-menu-button` de HA: se ve en pantalla estrecha o con la
 barra lateral siempre oculta (v0.2.1).
 
-## 10. Plan de migración
+## 10. Matrículas mal guardadas (v0.3.0)
+
+Problema: si la primera lectura de un coche era errónea y se guarda así, la
+tolerancia a errores lo sigue reconociendo, pero la matrícula queda mal para
+siempre.
+
+Estudio con los dos meses de lecturas que guardaba Frigate (357 visitas,
+27/07–24/09/2026), antes de decidir nada:
+
+- Frigate leyó mal una matrícula registrada en el **1 %** de las visitas (3 de
+  315).
+- **Los errores no se repiten**: la matrícula más vista (133 visitas) se leyó
+  mal una vez; otra, dos veces, cada una con un error distinto. Nunca el mismo
+  error dos veces.
+- Había un caso real: la misma persona registrada dos veces, con dos
+  matrículas a un carácter. Frigate leyó una dos veces y la otra nunca.
+
+De ahí las dos señales de `sugerencias.py`:
+
+- **Corrección**: la misma lectura distinta en `MIN_REPETICIONES` (2) visitas
+  o más, y más veces que la guardada. Un error suelto no la dispara; un error
+  sistemático o una matrícula mal guardada, sí.
+- **Duplicado**: dos registradas a un carácter. Es la que detecta el caso
+  real. Además, con dos casi iguales, una lectura dudosa entre ambas no
+  reconoce ninguna, por ambigua.
+
+Las lecturas se cuentan por visita (una por coche cerrado, §7), no por
+mensaje de Frigate, y se guardan las 8 más frecuentes de cada matrícula. Al
+actualizar desde una versión anterior se reconstruyen a partir del
+historial. El cálculo es incremental: al cerrar una visita solo se revisa esa
+matrícula, y el cruce de duplicados (43 matrículas, ~900 comparaciones) solo
+cuando cambia el registro.
+
+**Nunca se corrige solo.** La misma señal aparece si un coche distinto, con
+una matrícula a un carácter de una registrada, pasa a menudo: la tolerancia
+lo toma por el registrado y, si este tiene «puede abrir», le abriría.
+Corregir en silencio le pasaría la identidad y el permiso. Con aviso, ese
+caso lo decide una persona, y los avisos serán pocos.
+
+Por eso también «es otro coche» registra la lectura **sin «puede abrir»**
+por defecto.
+
+**Dónde se avisa**: en Ajustes → Reparaciones, el sitio de HA para «algo
+necesita tu atención», con arreglo en un menú; y en el panel, con los mismos
+botones. El evento `matriculas_sugerencia` sale una sola vez por sugerencia:
+las ya avisadas se guardan con las detecciones y no se repiten al reiniciar.
+Las descartadas se guardan con el registro, porque son una decisión. Al
+descargar la integración se quitan sus avisos, porque sin ella no se pueden
+resolver; al volver a cargarla se recrean.
+
+## 11. Plan de migración
 
 1. **Fase 1 — en sombra** (esta versión). La integración importa el
    `plates.json`, escucha Frigate, lanza eventos y lleva estadísticas, pero

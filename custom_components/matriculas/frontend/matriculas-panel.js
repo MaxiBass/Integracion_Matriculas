@@ -112,7 +112,7 @@ export function ordenar(fichas, criterio = "nombre") {
 // Decide qué servicio llamar con qué datos a partir del formulario. Lanza un
 // Error con un mensaje para la persona si falta algo evidente; el resto de la
 // validación la hace la integración.
-export function peticionGuardar(modo, original, formulario, existentes = []) {
+export function peticionGuardar(modo, original, formulario, existentes = [], sugerencia = null) {
   const matricula = normalizar(formulario.matricula);
   const nombre = String(formulario.nombre ?? "").trim();
   if (matricula.length < 2) throw new Error("Escribe la matrícula.");
@@ -128,6 +128,12 @@ export function peticionGuardar(modo, original, formulario, existentes = []) {
 
   if (modo === "nuevo") {
     if (existentes.includes(matricula)) throw yaExiste(matricula);
+    if (sugerencia) {
+      // «Es otro coche»: registra y descarta la sugerencia en un solo paso.
+      const datos = { id: sugerencia, accion: "otro_coche", ...comunes };
+      if (formulario.caduca) datos.caduca = formulario.caduca;
+      return { servicio: "resolver_sugerencia", datos };
+    }
     const datos = { matricula, ...comunes };
     if (formulario.caduca) datos.caduca = formulario.caduca;
     return { servicio: "guardar", datos };
@@ -139,6 +145,37 @@ export function peticionGuardar(modo, original, formulario, existentes = []) {
     datos.nueva_matricula = matricula;
   }
   return { servicio: "editar", datos };
+}
+
+export const veces = (n) => `${n} ${n === 1 ? "vez" : "veces"}`;
+
+// Título, explicación y botones de una sugerencia de matrícula mal guardada.
+export function textoSugerencia(s) {
+  const fp = formatoPlaca;
+  if (s.tipo === "correccion") {
+    return {
+      titulo: `¿${fp(s.matricula)} está mal guardada?`,
+      detalle:
+        `${s.nombre} está guardada como ${fp(s.matricula)}, pero Frigate la ha leído ` +
+        `${veces(s.veces_propuesta)} como ${fp(s.propuesta)} y ${veces(s.veces_guardada)} como ${fp(s.matricula)}.`,
+      acciones: [
+        { opcion: "corregir", texto: `Corregir a ${fp(s.propuesta)}`, principal: true },
+        { opcion: "otro_coche", texto: "Es otro coche" },
+        { opcion: "descartar", texto: "Está bien así" },
+      ],
+    };
+  }
+  return {
+    titulo: `¿${fp(s.matricula)} y ${fp(s.otra)} son el mismo coche?`,
+    detalle:
+      `${s.nombre} (${fp(s.matricula)}) y ${s.nombre_otra} (${fp(s.otra)}) se diferencian en un solo carácter. ` +
+      `Frigate ha leído ${fp(s.matricula)} ${veces(s.veces)} y ${fp(s.otra)} ${veces(s.veces_otra)}.`,
+    acciones: [
+      { opcion: "eliminar", matricula: s.matricula, texto: `Eliminar ${fp(s.matricula)}`, principal: s.sobra === s.matricula },
+      { opcion: "eliminar", matricula: s.otra, texto: `Eliminar ${fp(s.otra)}`, principal: s.sobra === s.otra },
+      { opcion: "descartar", texto: "Son distintos" },
+    ],
+  };
 }
 
 export const TIPOS = {
@@ -183,6 +220,8 @@ const MENSAJES_ERROR = {
   ignorar_registrada: "La matrícula {matricula} está registrada; elimínala antes de ignorarla.",
   no_ignorada: "La matrícula {matricula} no estaba ignorada.",
   no_cargada: "La integración Matrículas no está cargada.",
+  sugerencia_no_existe: "Esa sugerencia ya no existe: puede que ya se haya resuelto.",
+  accion_invalida: "Esa acción no vale para esta sugerencia.",
 };
 
 export function mensajeError(err) {
@@ -238,6 +277,8 @@ button { font: inherit; cursor: pointer; }
 .busqueda input { flex: 1; border: 0; outline: 0; background: none; color: var(--primary-text-color, #212121); font: inherit; padding: 10px 0; min-width: 0; }
 select { font: inherit; padding: 8px 10px; border-radius: 24px; border: 1px solid var(--mt-borde); background: var(--mt-tarjeta); color: var(--primary-text-color, #212121); }
 .boton { border: 0; border-radius: 20px; padding: 8px 16px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+/* Dos clases: .secundario es también la del texto gris (13px) y va después. */
+.boton.principal, .boton.secundario, .boton.peligro { font-size: 14px; }
 .boton.principal { background: var(--mt-primario); color: var(--text-primary-color, #fff); }
 .boton.secundario { background: none; color: var(--mt-primario); border: 1px solid var(--mt-borde); }
 .boton.peligro { background: none; color: var(--mt-error); border: 1px solid var(--mt-error); }
@@ -271,6 +312,13 @@ button.fila:hover { border-color: var(--mt-primario); }
 .foto { width: 72px; height: 54px; flex: none; border-radius: 8px; overflow: hidden; background: var(--mt-borde); display: flex; }
 .foto img { width: 100%; height: 100%; object-fit: cover; }
 .foto.grande { width: 100%; height: 200px; }
+.sugerencias { display: grid; gap: 8px; margin: 12px 0 4px; }
+.sugerencia {
+  background: var(--mt-tarjeta); border: 1px solid var(--mt-borde); border-left: 4px solid var(--mt-aviso);
+  border-radius: var(--mt-radio); padding: 12px; display: grid; gap: 8px;
+}
+.sugerencia strong { font-weight: 500; }
+.chip.revisar { border-color: var(--mt-aviso); color: var(--mt-aviso); }
 .vacio { text-align: center; color: var(--mt-texto2); padding: 40px 16px; line-height: 1.5; }
 .error-carga { color: var(--mt-error); }
 .fondo {
@@ -398,6 +446,7 @@ export class MatriculasPanel extends Base {
         <h1>Matrículas</h1>
       </div>
       <div class="contenido">
+        <div class="sugerencias" aria-live="polite"></div>
         <div class="pestanas" role="tablist"></div>
         <div class="herramientas">
           <label class="busqueda">${icono("buscar")}
@@ -433,8 +482,31 @@ export class MatriculasPanel extends Base {
 
   _pintar() {
     if (!this.shadowRoot) return;
+    this._pintarSugerencias();
     this._pintarPestanas();
     this._pintarLista();
+  }
+
+  _pintarSugerencias() {
+    const contenedor = this.shadowRoot.querySelector(".sugerencias");
+    const lista = this._datos?.sugerencias ?? [];
+    contenedor.hidden = !lista.length;
+    contenedor.innerHTML = lista
+      .map((s) => {
+        const t = textoSugerencia(s);
+        const botones = t.acciones
+          .map(
+            (a) => `<button class="boton ${a.principal ? "principal" : "secundario"}" data-accion="sugerencia"
+              data-id="${esc(s.id)}" data-opcion="${a.opcion}" data-matricula="${esc(a.matricula ?? "")}">${esc(a.texto)}</button>`
+          )
+          .join("");
+        return `<div class="sugerencia" role="alert">
+          <strong>${esc(t.titulo)}</strong>
+          <div class="secundario">${esc(t.detalle)}</div>
+          <div class="acciones">${botones}</div>
+        </div>`;
+      })
+      .join("");
   }
 
   _pintarPestanas() {
@@ -500,6 +572,7 @@ export class MatriculasPanel extends Base {
   _htmlRegistradas() {
     const hoy = hoyIso();
     const fichas = ordenar(filtrar(this._datos.matriculas, this._busqueda), this._orden);
+    const aRevisar = new Set((this._datos.sugerencias ?? []).flatMap((s) => [s.matricula, s.otra].filter(Boolean)));
     if (!fichas.length) {
       return this._vacio(
         this._busqueda ? "Ninguna matrícula coincide con la búsqueda." : "Todavía no hay matrículas registradas."
@@ -511,6 +584,7 @@ export class MatriculasPanel extends Base {
           f.avisar ? `<span class="chip si">Avisa</span>` : `<span class="chip">No avisa</span>`,
           f.abrir ? `<span class="chip si">Puede abrir</span>` : `<span class="chip">No abre</span>`,
         ];
+        if (aRevisar.has(f.matricula)) chips.unshift(`<span class="chip revisar">Revisar</span>`);
         if (f.caduca) {
           chips.push(
             estaCaducada(f.caduca, hoy)
@@ -628,6 +702,7 @@ export class MatriculasPanel extends Base {
     if (accion === "editar") return this._abrirDialogo("editar", matricula);
     if (accion === "ignorar") return this._llamar("ignorar", { matricula }, `${formatoPlaca(matricula)} ignorada: no volverá a avisar.`);
     if (accion === "dejar_de_ignorar") return this._llamar("dejar_de_ignorar", { matricula }, `${formatoPlaca(matricula)} vuelve a avisar.`);
+    if (accion === "sugerencia") return this._resolverSugerencia(origen.dataset);
     if (accion === "cerrar") return this._cerrarDialogo();
     if (accion === "guardar") return this._guardar();
     if (accion === "eliminar") return this._eliminar();
@@ -654,7 +729,25 @@ export class MatriculasPanel extends Base {
     }
   }
 
-  _abrirDialogo(modo, matricula) {
+  async _resolverSugerencia({ id, opcion, matricula }) {
+    const s = this._datos?.sugerencias?.find((x) => x.id === id);
+    if (!s) return;
+    if (opcion === "otro_coche") {
+      // Diálogo de alta con la lectura ya puesta y, por defecto, sin abrir.
+      this._abrirDialogo("nuevo", s.propuesta, { sugerencia: id, abrir: false });
+      return;
+    }
+    const datos = { id, accion: opcion };
+    if (opcion === "eliminar") datos.matricula = matricula;
+    const textos = {
+      corregir: `Corregida a ${formatoPlaca(s.propuesta)}.`,
+      eliminar: `${formatoPlaca(matricula)} eliminada.`,
+      descartar: "No se volverá a sugerir.",
+    };
+    await this._llamar("resolver_sugerencia", datos, textos[opcion]);
+  }
+
+  _abrirDialogo(modo, matricula, extra = {}) {
     const ficha = modo === "editar" ? this._datos?.matriculas.find((f) => f.matricula === matricula) : null;
     if (modo === "editar" && !ficha) return;
     this._dialogo = {
@@ -663,7 +756,8 @@ export class MatriculasPanel extends Base {
       ficha,
       valores: ficha
         ? { matricula: ficha.matricula, nombre: ficha.nombre, avisar: ficha.avisar, abrir: ficha.abrir, notas: ficha.notas ?? "", caduca: ficha.caduca ?? "" }
-        : { matricula: matricula ?? "", nombre: "", avisar: true, abrir: true, notas: "", caduca: "" },
+        : { matricula: matricula ?? "", nombre: "", avisar: true, abrir: extra.abrir ?? true, notas: "", caduca: "" },
+      sugerencia: extra.sugerencia ?? null,
       fotoDesconocida: modo === "nuevo" ? this._datos?.desconocidas.find((v) => v.matricula === matricula)?.frigate_id : null,
       error: "",
       confirmarBorrado: false,
@@ -697,7 +791,9 @@ export class MatriculasPanel extends Base {
     d.valores = this._leerFormulario();
     let peticion;
     try {
-      peticion = peticionGuardar(d.modo, d.original, d.valores, this._datos.matriculas.map((f) => f.matricula));
+      peticion = peticionGuardar(
+        d.modo, d.original, d.valores, this._datos.matriculas.map((f) => f.matricula), d.sugerencia
+      );
     } catch (err) {
       d.error = err.message;
       this._pintarDialogo();
@@ -706,7 +802,7 @@ export class MatriculasPanel extends Base {
     d.ocupado = true;
     d.error = "";
     this._pintarDialogo();
-    const destino = peticion.datos.nueva_matricula ?? peticion.datos.matricula;
+    const destino = peticion.datos.nueva_matricula ?? peticion.datos.matricula ?? d.valores.matricula;
     const ok = await this._llamar(
       peticion.servicio,
       peticion.datos,
@@ -758,12 +854,13 @@ export class MatriculasPanel extends Base {
     contenedor.innerHTML = `
       <div class="fondo">
         <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="titulo-dialogo">
-          <h2 id="titulo-dialogo">${d.modo === "nuevo" ? "Añadir matrícula" : "Editar matrícula"}
+          <h2 id="titulo-dialogo">${d.sugerencia ? "Registrar como otro coche" : d.modo === "nuevo" ? "Añadir matrícula" : "Editar matrícula"}
             <button class="icono" data-accion="cerrar" title="Cerrar">${icono("cerrar")}</button></h2>
           ${this._foto(fotoId, { clase: "foto grande" })}
           ${estadisticas}
           <div class="campo"><label for="f-matricula">Matrícula</label>
-            <input id="f-matricula" value="${esc(v.matricula)}" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
+            <input id="f-matricula" value="${esc(v.matricula)}" autocomplete="off" autocapitalize="characters" spellcheck="false"
+              ${d.sugerencia ? "readonly" : ""}></div>
           <div class="campo"><label for="f-nombre">Nombre</label>
             <input id="f-nombre" value="${esc(v.nombre)}" autocomplete="off" placeholder="Quién es"></div>
           <label class="interruptor"><span>Avisar cuando llegue<small>Notifica su llegada al videoportero.</small></span>

@@ -47,10 +47,42 @@ usuarios:
   cuando se reconoció de forma aproximada.
 - **Ignoradas**: para dejar de ignorarlas.
 
+Arriba del todo aparecen las **sugerencias** de matrículas mal guardadas
+(ver abajo), con sus botones.
+
 Se actualiza solo cuando algo cambia. Las fotos salen del proxy de
 notificaciones de la integración de Frigate
 (`/api/frigate/notifications/<id>/thumbnail.jpg`); si Frigate ya no conserva
 una, no se muestra.
+
+## Matrículas mal guardadas
+
+Si se guarda una primera lectura errónea (una letra cambiada), la tolerancia
+a errores sigue reconociendo el coche, pero la matrícula queda mal. La
+integración lo detecta y lo propone, sin corregir nunca por su cuenta:
+
+- **Corrección**: una matrícula registrada que Frigate lee en 2 visitas o más
+  como otra concreta, y más veces que como la guardada. Opciones: corregirla
+  (conserva nombre, permisos y estadísticas), registrar la otra como un
+  coche distinto (por defecto sin «puede abrir») o descartar.
+- **Duplicado**: dos registradas que se diferencian en un solo carácter.
+  Opciones: eliminar una u otra (se destaca la que nunca se ha leído) o
+  descartar.
+
+Aparecen en **Ajustes → Reparaciones** y en el panel, se resuelven desde
+cualquiera de los dos y lanzan una vez el evento `matriculas_sugerencia`, por
+si se quiere un aviso en el móvil:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: matriculas_sugerencia
+actions:
+  - action: notify.mobile_app_telefono
+    data:
+      title: Matrículas
+      message: "Revisa {{ trigger.event.data.matricula }} en Ajustes → Reparaciones"
+```
 
 ## Evento `matriculas_detectada`
 
@@ -101,6 +133,7 @@ actions:
 | `matriculas.buscar` | Identifica una lectura como si llegara de Frigate (solo respuesta) |
 | `matriculas.listar` | Registradas con estadísticas, ignoradas y desconocidas más vistas (solo respuesta) |
 | `matriculas.importar` | Importa un `plates.json` (fusionando o reemplazando) |
+| `matriculas.resolver_sugerencia` | Aplica una opción a una sugerencia: `corregir`, `otro_coche`, `eliminar` o `descartar` |
 
 Cada matrícula tiene `nombre`, `avisar`, `abrir` (puede abrir), `notas` y
 `caduca` (último día en que se reconoce). Los errores (matrícula inválida,
@@ -108,8 +141,8 @@ que no existe…) se muestran en pantalla.
 
 ## Entidades
 
-- `sensor.matriculas_registradas`: número de matrículas, con las ignoradas y
-  caducadas como atributos.
+- `sensor.matriculas_registradas`: número de matrículas, con las ignoradas,
+  caducadas y sugerencias pendientes como atributos.
 - `event.matriculas_deteccion`: cada detección, para el historial y el
   diario.
 

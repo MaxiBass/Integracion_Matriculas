@@ -102,6 +102,28 @@ comprobar(p.mensajeError({ code: "x", message: "Otro fallo" }) === "Otro fallo",
 comprobar(p.urlFoto("1758.4-abc") === "/api/frigate/notifications/1758.4-abc/thumbnail.jpg", "url de la foto de Frigate");
 comprobar(p.urlFoto("") === "", "sin id no hay foto");
 
+// Sugerencias de matrículas mal guardadas
+comprobar(p.veces(1) === "1 vez" && p.veces(3) === "3 veces", "singular y plural de veces");
+const corr = p.textoSugerencia({
+  id: "correccion_1234bcd_1234bcf", tipo: "correccion", matricula: "1234BCD", propuesta: "1234BCF",
+  nombre: "Abuela", veces_propuesta: 3, veces_guardada: 0,
+});
+comprobar(corr.titulo === "¿1234 BCD está mal guardada?", "título de corrección");
+comprobar(corr.detalle.includes("3 veces como 1234 BCF") && corr.detalle.includes("0 veces como 1234 BCD"),
+  `explica la evidencia: ${corr.detalle}`);
+comprobar(igual(corr.acciones.map((a) => a.opcion), ["corregir", "otro_coche", "descartar"]) && corr.acciones[0].principal,
+  "corrección: corregir (destacada), otro coche o descartar");
+const dup = p.textoSugerencia({
+  id: "duplicado_0123knn_0123knw", tipo: "duplicado", matricula: "0123KNN", otra: "0123KNW",
+  nombre: "L", nombre_otra: "L2", veces: 0, veces_otra: 2, sobra: "0123KNN",
+});
+comprobar(dup.acciones[0].matricula === "0123KNN" && dup.acciones[0].principal && !dup.acciones[1].principal,
+  "duplicado: destaca eliminar la que nunca se ha leído");
+r = p.peticionGuardar("nuevo", "", { ...form, matricula: "1234BCF", abrir: false }, existentes, "correccion_1234bcd_1234bcf");
+comprobar(r.servicio === "resolver_sugerencia" && r.datos.accion === "otro_coche" && r.datos.id === "correccion_1234bcd_1234bcf"
+  && r.datos.abrir === false && r.datos.nombre === "Nuevo",
+  "«es otro coche» registra y resuelve la sugerencia en una sola llamada");
+
 // Botón del menú: como el ha-menu-button de HA, solo si la barra lateral no se ve.
 const panel = new p.MatriculasPanel();
 const menu = (narrow, dockedSidebar) => {

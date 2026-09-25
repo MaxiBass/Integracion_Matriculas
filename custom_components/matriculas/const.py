@@ -33,6 +33,8 @@ LONGITUD_MAXIMA = 10
 LONGITUD_MAXIMA_NOMBRE = 100
 
 EVENTO_DETECTADA = "matriculas_detectada"
+# Una matrícula parece mal guardada (ver sugerencias.py). Una vez por sugerencia.
+EVENTO_SUGERENCIA = "matriculas_sugerencia"
 
 SENAL_REGISTRO = f"{DOMAIN}_registro_actualizado"
 SENAL_DETECCION = f"{DOMAIN}_deteccion"
