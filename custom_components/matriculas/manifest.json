@@ -1,7 +1,7 @@
 {
   "domain": "matriculas",
   "name": "Matrículas",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "documentation": "https://github.com/MaxiBass/Integracion_Matriculas",
   "issue_tracker": "https://github.com/MaxiBass/Integracion_Matriculas/issues",
   "requirements": [],

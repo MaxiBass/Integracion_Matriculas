@@ -177,6 +177,13 @@ estable.
   de HA (una `<img>` no lo manda). Si Frigate ya no conserva la foto, se
   quita el hueco.
 - **Historial: las últimas 100** en el panel, de las 500 guardadas.
+- **Lo más reciente arriba en todas las pestañas** (decisión de Maxi, v0.3.1).
+  Registradas parte de «Última visita» (las nunca vistas, al final y por
+  nombre) y conserva el selector. Desconocidas va por la última vez vista,
+  aunque otra se haya visto más; Historial, por la hora de la detección, no
+  por el orden en que se cerró cada coche; Ignoradas, por la fecha en que se
+  ignoró. Se ordena en el panel, no en `instantanea()`, para no cambiar lo
+  que devuelve `matriculas.listar` (desconocidas de más a menos vistas).
 
 Probado con `tests/panel_demo.html` en escritorio y móvil (375 px), en tema
 claro y oscuro. Dos fallos encontrados así: la foto grande del diálogo se

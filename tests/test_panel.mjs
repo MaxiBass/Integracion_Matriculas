@@ -49,6 +49,38 @@ comprobar(
   "ordenar por más vistas"
 );
 comprobar(fichas[0].matricula === "1234BCD", "ordenar no modifica la lista original");
+comprobar(new p.MatriculasPanel()._orden === "ultima", "registradas: por defecto, la última visita arriba");
+
+// Lo que llega del servidor (desconocidas de más a menos vistas, ignoradas
+// por matrícula, historial por hora de cierre) se reordena en el panel.
+const desconocidas = [
+  { matricula: "1111AAA", veces: 5, ultima: "2026-09-20T10:00:00+00:00" },
+  { matricula: "2222BBB", veces: 1, ultima: "2026-09-28T12:16:17+00:00" },
+  { matricula: "3333CCC", veces: 2, ultima: "2026-09-25T08:00:00+00:00" },
+];
+comprobar(
+  igual(p.recientesPrimero(desconocidas, "ultima").map((v) => v.matricula), ["2222BBB", "3333CCC", "1111AAA"]),
+  "desconocidas: la vista más recientemente arriba, aunque se haya visto menos"
+);
+const historial = [
+  { matricula: "2222BBB", hora: "2026-09-28T12:18:59+00:00" },
+  { matricula: "2222BBB", hora: "2026-09-28T12:18:43+00:00" },
+  { matricula: "4444DDD", hora: "2026-09-28T12:19:30+00:00" },
+];
+comprobar(
+  igual(p.recientesPrimero(historial, "hora").map((h) => h.hora.slice(11, 19)), ["12:19:30", "12:18:59", "12:18:43"]),
+  "historial: por la hora de la detección, no por el orden en que se cerró"
+);
+const ignoradas = [
+  { matricula: "1111AAA", desde: "2026-09-26T09:00:00+00:00" },
+  { matricula: "5555EEE" },
+  { matricula: "3333CCC", desde: "2026-09-27T09:00:00+00:00" },
+];
+comprobar(
+  igual(p.recientesPrimero(ignoradas, "desde").map((i) => i.matricula), ["3333CCC", "1111AAA", "5555EEE"]),
+  "ignoradas: la última ignorada arriba; sin fecha, al final"
+);
+comprobar(desconocidas[0].matricula === "1111AAA", "recientesPrimero no modifica la lista original");
 
 const existentes = fichas.map((f) => f.matricula);
 const form = { matricula: "2468-dfg", nombre: " Nuevo ", avisar: true, abrir: false, notas: "", caduca: "" };

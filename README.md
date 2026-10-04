@@ -35,17 +35,18 @@ MQTT es opcional: sin él no llegan lecturas, pero los servicios funcionan.
 ## Panel
 
 La integración añade **Matrículas** a la barra lateral, para todos los
-usuarios:
+usuarios. En todas las pestañas sale arriba lo más reciente:
 
 - **Registradas**: búsqueda por matrícula o nombre (sin importar tildes),
-  orden por nombre, última visita o veces vista, y un diálogo para añadir,
-  editar (también cambiar la matrícula), poner caducidad o eliminar.
-- **Desconocidas**: las que ha leído Frigate y no están registradas, de más a
-  menos vistas, con la foto de la última vez. Se añaden o se ignoran con un
-  toque.
+  orden por última visita (el de partida), nombre, veces vista o matrícula,
+  y un diálogo para añadir, editar (también cambiar la matrícula), poner
+  caducidad o eliminar.
+- **Desconocidas**: las que ha leído Frigate y no están registradas, la vista
+  más recientemente arriba, con la foto de la última vez. Se añaden o se
+  ignoran con un toque.
 - **Historial**: las últimas 100 detecciones, con foto y la lectura original
   cuando se reconoció de forma aproximada.
-- **Ignoradas**: para dejar de ignorarlas.
+- **Ignoradas**: la última ignorada arriba, para dejar de ignorarlas.
 
 Arriba del todo aparecen las **sugerencias** de matrículas mal guardadas
 (ver abajo), con sus botones.

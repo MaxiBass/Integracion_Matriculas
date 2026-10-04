@@ -55,8 +55,11 @@
     desconocidas: [
       { matricula: "8642HJK", primera: hace(200), ultima: hace(5), veces: 4, camara: "Videoportero-Sub", frigate_id: "demo-3" },
       { matricula: "1357CDF", primera: hace(100), ultima: hace(50), veces: 1, camara: "Videoportero-Sub", frigate_id: "caducada" },
+      // Llega la última (el servidor ordena por veces), pero es la más reciente.
+      { matricula: "4826KLM", primera: hace(1), ultima: hace(1), veces: 1, camara: "Videoportero-Sub", frigate_id: "" },
     ],
-    ignoradas: [{ matricula: "9999ZZZ", desde: hace(700) }],
+    // El servidor las manda por matrícula; el panel, la última ignorada arriba.
+    ignoradas: [{ matricula: "1111AAA", desde: hace(700) }, { matricula: "9999ZZZ", desde: hace(20) }],
     sugerencias: [
       { id: "correccion_9012jkl_9012jkm", tipo: "correccion", matricula: "9012JKL", propuesta: "9012JKM",
         nombre: "Tío Ramón", veces_propuesta: 3, veces_guardada: 0 },

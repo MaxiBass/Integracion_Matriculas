@@ -109,6 +109,16 @@ export function ordenar(fichas, criterio = "nombre") {
   return copia.sort(porNombre);
 }
 
+// Lo más reciente arriba, según un campo con fecha ISO en UTC (se comparan
+// como texto). Sin fecha, al final; a igualdad, por matrícula.
+export function recientesPrimero(lista, campo) {
+  return [...lista].sort(
+    (a, b) =>
+      String(b[campo] ?? "").localeCompare(String(a[campo] ?? "")) ||
+      String(a.matricula).localeCompare(String(b.matricula))
+  );
+}
+
 // Decide qué servicio llamar con qué datos a partir del formulario. Lanza un
 // Error con un mensaje para la persona si falta algo evidente; el resto de la
 // validación la hace la integración.
@@ -369,7 +379,7 @@ export class MatriculasPanel extends Base {
     this._errorCarga = "";
     this._pestana = "registradas";
     this._busqueda = "";
-    this._orden = "nombre";
+    this._orden = "ultima";
     this._dialogo = null;
     this._desuscribir = null;
     this._narrow = false;
@@ -453,7 +463,9 @@ export class MatriculasPanel extends Base {
             <input id="busqueda" type="search" placeholder="Buscar matrícula o nombre" autocomplete="off">
           </label>
           <select id="orden" aria-label="Ordenar">
-            ${Object.entries(ORDENES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}
+            ${Object.entries(ORDENES)
+              .map(([k, v]) => `<option value="${k}"${k === this._orden ? " selected" : ""}>${esc(v)}</option>`)
+              .join("")}
           </select>
           <button class="boton principal" data-accion="nueva">${icono("mas")}Añadir</button>
         </div>
@@ -608,12 +620,12 @@ export class MatriculasPanel extends Base {
   }
 
   _htmlDesconocidas() {
-    const lista = filtrar(this._datos.desconocidas, this._busqueda);
+    const lista = recientesPrimero(filtrar(this._datos.desconocidas, this._busqueda), "ultima");
     if (!lista.length) {
       return this._vacio(
         this._busqueda
           ? "Ninguna desconocida coincide con la búsqueda."
-          : "No hay matrículas desconocidas.<br>Las que lea Frigate y no estén registradas aparecerán aquí, de más a menos vistas."
+          : "No hay matrículas desconocidas.<br>Las que lea Frigate y no estén registradas aparecerán aquí, las más recientes primero."
       );
     }
     return lista
@@ -635,7 +647,8 @@ export class MatriculasPanel extends Base {
   }
 
   _htmlHistorial() {
-    const lista = filtrar(this._datos.historial, this._busqueda);
+    // Se anotan al cerrarse cada coche, no al verlo: se ordenan por la hora.
+    const lista = recientesPrimero(filtrar(this._datos.historial, this._busqueda), "hora");
     if (!lista.length) {
       return this._vacio(
         this._busqueda
@@ -665,7 +678,7 @@ export class MatriculasPanel extends Base {
   }
 
   _htmlIgnoradas() {
-    const lista = filtrar(this._datos.ignoradas, this._busqueda);
+    const lista = recientesPrimero(filtrar(this._datos.ignoradas, this._busqueda), "desde");
     if (!lista.length) {
       return this._vacio(
         this._busqueda ? "Ninguna ignorada coincide con la búsqueda." : "No hay matrículas ignoradas."
