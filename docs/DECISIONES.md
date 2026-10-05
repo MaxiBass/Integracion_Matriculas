@@ -185,6 +185,14 @@ estable.
   ignoró. Se ordena en el panel, no en `instantanea()`, para no cambiar lo
   que devuelve `matriculas.listar` (desconocidas de más a menos vistas).
 
+- **Icono propio** en `custom_components/matriculas/brand/` (`icon.png`
+  256×256 e `icon@2x.png` 512×512), v0.3.2. Desde HA 2026.9 el componente
+  `brands` sirve las imágenes de una integración custom desde esa carpeta, y
+  solo la busca al arrancar: hace falta reiniciar tras instalarlo. Es un
+  diseño propio (una matrícula europea con texto inventado dentro de las
+  esquinas de un visor), dibujado con `docs/icono/generar.py` (Pillow, que ya
+  trae HA). Sirve igual en tema oscuro: sin `dark_icon.png`, HA usa este.
+
 Probado con `tests/panel_demo.html` en escritorio y móvil (375 px), en tema
 claro y oscuro. Dos fallos encontrados así: la foto grande del diálogo se
 montaba sobre el campo de la matrícula (`aspect-ratio` dentro de una rejilla),

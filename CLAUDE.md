@@ -34,8 +34,10 @@ custom_components/matriculas/
   __init__.py       alta de la entrada y servicios
   websocket.py      canal matriculas/suscribir del panel
   frontend/matriculas-panel.js   el panel (JS sin dependencias)
+  brand/            icono propio (HA 2026.9 lo lee de aquí)
   sensor.py, event.py, entity.py, config_flow.py
 docs/DECISIONES.md  por qué es así; NO va en custom_components
+docs/icono/generar.py  dibuja brand/icon.png e icon@2x.png
 tests/test_matriculas.py
 ```
 

@@ -301,6 +301,16 @@ async def _recorrido(directorio: Path) -> None:
         comprobar((RAIZ / "custom_components/matriculas/frontend/matriculas-panel.js").is_file(),
                   "el fichero del panel existe donde se sirve")
 
+        # ── Icono ── HA 2026.9 lo sirve desde brand/ (componente brands).
+        from homeassistant import loader
+        from PIL import Image
+        integracion = (await loader.async_get_custom_components(hass))["matriculas"]
+        comprobar(integracion.has_branding, "HA ve la carpeta brand/ del icono")
+        for nombre, lado in (("icon.png", 256), ("icon@2x.png", 512)):
+            with Image.open(Path(integracion.file_path) / "brand" / nombre) as im:
+                comprobar(im.format == "PNG" and im.size == (lado, lado) and im.getpixel((0, 0))[3] == 0,
+                          f"{nombre}: PNG de {lado}×{lado} con las esquinas transparentes")
+
         # ── Importación automática ──
         comprobar(set(almacen.matriculas) == {"1234BCD", "5678FGH", "9012JKL", "3456BMX"},
                   f"importa el plates.json al arrancar por primera vez ({sorted(almacen.matriculas)})")
