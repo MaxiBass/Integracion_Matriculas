@@ -12,6 +12,7 @@ from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
+    OptionsFlowWithReload,
 )
 from homeassistant.core import callback
 from homeassistant.helpers import selector
@@ -45,8 +46,7 @@ class MatriculasConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
+        # Una sola entrada: lo hace HA por `single_config_entry` del manifest.
         if user_input is not None:
             return self.async_create_entry(
                 title="Matrículas", data={}, options=limpiar(user_input)
@@ -59,7 +59,9 @@ class MatriculasConfigFlow(ConfigFlow, domain=DOMAIN):
         return MatriculasOptionsFlow()
 
 
-class MatriculasOptionsFlow(OptionsFlow):
+class MatriculasOptionsFlow(OptionsFlowWithReload):
+    """Al guardar, HA recarga la entrada (con el prefijo y las cámaras nuevos)."""
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

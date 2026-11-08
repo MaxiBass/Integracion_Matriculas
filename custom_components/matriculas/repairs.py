@@ -17,8 +17,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
 from . import sugerencias
-from .almacen import Almacen, marcadores_sugerencia
-from .const import DOMAIN
+from . import almacen_cargado
+from .almacen import Almacen, _validar_nombre, marcadores_sugerencia
 
 
 async def async_create_fix_flow(
@@ -32,8 +32,7 @@ class ArreglarSugerencia(RepairsFlow):
         self._ident = ident
 
     def _almacen(self) -> Almacen | None:
-        entradas = self.hass.config_entries.async_loaded_entries(DOMAIN)
-        return entradas[0].runtime_data.almacen if entradas else None
+        return almacen_cargado(self.hass)
 
     def _sugerencia(self) -> dict[str, Any] | None:
         almacen = self._almacen()
@@ -60,7 +59,15 @@ class ArreglarSugerencia(RepairsFlow):
         almacen = self._almacen()
         if almacen is None or self._ident not in almacen.sugerencias:
             return self.async_abort(reason="ya_resuelta")
-        await almacen.async_resolver_sugerencia(self._ident, accion, **kw)
+        try:
+            await almacen.async_resolver_sugerencia(self._ident, accion, **kw)
+        except ServiceValidationError as err:
+            # Por ejemplo, corregir a una matrícula que alguien acaba de
+            # registrar: se dice por qué en vez de un error sin explicar.
+            return self.async_abort(
+                reason="no_se_pudo",
+                description_placeholders={"error": str(err) or err.translation_key or type(err).__name__},
+            )
         return self.async_create_entry(data={})
 
     async def async_step_corregir(self, user_input=None) -> data_entry_flow.FlowResult:
@@ -86,14 +93,16 @@ class ArreglarSugerencia(RepairsFlow):
         errores: dict[str, str] = {}
         if user_input is not None:
             try:
+                _validar_nombre(user_input["nombre"])
+            except ServiceValidationError:
+                errores["nombre"] = "nombre_vacio"
+            else:
                 return await self._resolver(
                     "otro_coche",
                     nombre=user_input["nombre"],
                     avisar=user_input["avisar"],
                     abrir=user_input["abrir"],
                 )
-            except ServiceValidationError:
-                errores["nombre"] = "nombre_vacio"
         return self.async_show_form(
             step_id="otro_coche",
             data_schema=vol.Schema(

@@ -74,6 +74,28 @@ Detalles que parecen mejorables y no se tocan:
   descarta cualquier lectura con letras en la parte numérica o cifras en la
   de letras. Se mantiene por fidelidad y por si ese `format` cambia.
 
+**Divergencias conscientes desde la v0.3.3** (revisión del 08/11/2026). La
+macro ya no existe en casa (`custom_templates/matriculas.jinja` no se
+encuentra al renderizarla, comprobado el 08/11), así que no hay que tocarla
+ni volver a comparar: `coincidencia.py` es la referencia.
+
+- **Lectura tal cual y corregida.** La corrección posicional del paso 1
+  supone el formato actual (NNNNLLL) y se aplicaba a cualquier lectura de 7
+  caracteres. Con una provincial antigua (letra, 4 cifras y 2 letras) daba
+  falsos negativos: `B1234XY` leída `B1234XV` pasaba a `81234XV`, a dos
+  caracteres de la guardada, y no se reconocía. Ahora los pasos 3a y 3b
+  comparan la lectura tal cual y la corregida y se quedan con la menor
+  diferencia. Se prefirió a «corregir solo si el resultado tiene formato
+  español actual» porque esa regla pierde lecturas del formato actual con
+  un error en otra posición (`I234BCF` → `1234BCD`). El paso 2 (exacta tras
+  corregir) no cambia.
+- **Longitud mínima 6 para las aproximadas.** `LONGITUD_MINIMA` del registro
+  es 2, y el paso 3b aceptaba un carácter distinto en matrículas de 2 a 4
+  caracteres: casi cualquier lectura corta coincidía con una registrada, y
+  una aproximada abre (§4). Ahora 3a y 3b solo se aplican a lecturas de 6
+  caracteres o más (las provinciales más cortas, como `M1234X`, tienen 6);
+  las más cortas tienen que ser exactas.
+
 ## 4. Una coincidencia aproximada SÍ abre la puerta
 
 Decisión expresa de Maxi (24/09/2026). `abrir` del evento es el de la
@@ -269,3 +291,33 @@ resolver; al volver a cargarla se recrean.
    `matriculas_detectada` en vez del MQTT en bruto y la macro; las
    notificaciones de matrícula nueva llaman a `matriculas.guardar` e
    `matriculas.ignorar`. Después se retiran las piezas de §1.
+
+## 12. Revisión del 08/11/2026 (v0.3.3)
+
+- **`importar` solo para administradores** (`async_register_admin_service`):
+  con `reemplazar: true` vacía el registro, y lo podía llamar cualquier
+  usuario. El panel no lo usa; los servicios que sí usa (guardar, editar,
+  eliminar, ignorar, dejar de ignorar, resolver sugerencias) siguen abiertos
+  a todos, como el panel (§9). Una ruta relativa se resuelve en la carpeta
+  de configuración (antes, en el directorio del proceso) y solo se aceptan
+  ficheros de esa carpeta o de `allowlist_external_dirs`. La comprobación
+  propia de HA (`is_allowed_path`) sola no basta: por defecto solo permite
+  `www` y las carpetas de medios, y el `plates.json` está en `packages/`.
+- **Coincidencia**: lectura tal cual y corregida, y longitud mínima 6 para
+  las aproximadas (§3).
+- **Poda de desconocidas.** `vistas` crecía sin límite con desconocidas y
+  lecturas basura. Al arrancar y una vez al día se olvidan las desconocidas
+  vistas una sola vez hace más de 30 días (`DIAS_VISTA_UNICA`) y, si aún
+  quedan más de 1.000 (`MAX_VISTAS_DESCONOCIDAS`), las más antiguas. Las
+  registradas y las ignoradas no se tocan nunca. Una matrícula eliminada
+  vuelve a ser desconocida (conserva sus estadísticas) y entra en la misma
+  poda.
+- **Reparaciones**: si resolver una sugerencia falla (por ejemplo, alguien
+  acaba de registrar la matrícula propuesta), el arreglo se cierra diciendo
+  por qué en vez de dar un error sin explicar.
+- Menores: una función común para encontrar el almacén de la entrada
+  cargada; `OptionsFlowWithReload` en vez del oyente que recargaba;
+  `single_config_entry` del manifest en vez de la comprobación a mano;
+  `HassKey` para la marca de la ruta estática; una fecha de caducidad
+  ilegible ya no rompe la identificación (se toma como no caducada y se
+  avisa en el registro).

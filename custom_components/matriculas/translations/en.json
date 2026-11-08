@@ -91,6 +91,9 @@
     "importar_ilegible": {
       "message": "{ruta} could not be read as a valid plates.json. Nothing has been changed."
     },
+    "importar_no_permitida": {
+      "message": "Only files inside the Home Assistant configuration folder or an allowlist_external_dirs folder can be imported: {ruta} is not."
+    },
     "no_cargada": {
       "message": "The License plates integration is not loaded."
     },
@@ -289,7 +292,8 @@
           }
         },
         "abort": {
-          "ya_resuelta": "This suggestion no longer applies."
+          "ya_resuelta": "This suggestion no longer applies.",
+          "no_se_pudo": "It could not be done: {error}"
         },
         "error": {
           "nombre_vacio": "The name is missing."
@@ -312,7 +316,8 @@
           }
         },
         "abort": {
-          "ya_resuelta": "This suggestion no longer applies."
+          "ya_resuelta": "This suggestion no longer applies.",
+          "no_se_pudo": "It could not be done: {error}"
         }
       }
     }

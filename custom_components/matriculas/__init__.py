@@ -22,7 +22,9 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.util.hass_dict import HassKey
 from homeassistant.loader import async_get_integration
 
 from .almacen import SIN_CAMBIO, Almacen
@@ -57,6 +59,9 @@ SERVICIO_IMPORTAR = "importar"
 SERVICIO_RESOLVER_SUGERENCIA = "resolver_sugerencia"
 
 _FECHA_O_VACIO = vol.Any(None, "", cv.date)
+
+# La ruta estática del panel se registra una sola vez (no se puede quitar).
+RUTA_ESTATICA_REGISTRADA: HassKey[bool] = HassKey(f"{DOMAIN}_ruta_estatica")
 
 ESQUEMA_MATRICULA = vol.Schema({vol.Required("matricula"): cv.string})
 ESQUEMA_GUARDAR = vol.Schema(
@@ -146,7 +151,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EntradaMatriculas) -> bo
     entry.async_create_background_task(
         hass, detector.async_iniciar(), f"{DOMAIN}_suscripcion_frigate"
     )
-    entry.async_on_unload(entry.add_update_listener(_al_actualizar_opciones))
+    # Cambiar las opciones recarga la entrada: OptionsFlowWithReload.
     return True
 
 
@@ -162,7 +167,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: EntradaMatriculas) -> b
 
 async def _async_registrar_panel(hass: HomeAssistant) -> None:
     """Panel "Matrículas" en la barra lateral, para todos los usuarios."""
-    if not hass.data.get(f"{DOMAIN}_ruta_estatica"):
+    if not hass.data.get(RUTA_ESTATICA_REGISTRADA):
         # Una ruta estática no se puede quitar: se registra una sola vez.
         await hass.http.async_register_static_paths(
             [
@@ -173,7 +178,7 @@ async def _async_registrar_panel(hass: HomeAssistant) -> None:
                 )
             ]
         )
-        hass.data[f"{DOMAIN}_ruta_estatica"] = True
+        hass.data[RUTA_ESTATICA_REGISTRADA] = True
 
     # La versión en la URL obliga al navegador a descargar el JS nuevo al
     # actualizar la integración.
@@ -189,17 +194,28 @@ async def _async_registrar_panel(hass: HomeAssistant) -> None:
     )
 
 
-async def _al_actualizar_opciones(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
+def almacen_cargado(hass: HomeAssistant) -> Almacen | None:
+    """El almacén de la entrada cargada, o None. Se busca cada vez: si la
+    entrada se recarga, el almacén es otro."""
+    entradas = hass.config_entries.async_loaded_entries(DOMAIN)
+    return entradas[0].runtime_data.almacen if entradas else None
 
 
 def _almacen(hass: HomeAssistant) -> Almacen:
-    entradas = hass.config_entries.async_loaded_entries(DOMAIN)
-    if not entradas:
+    if (almacen := almacen_cargado(hass)) is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN, translation_key="no_cargada"
         )
-    return entradas[0].runtime_data.almacen
+    return almacen
+
+
+def _ruta_permitida(hass: HomeAssistant, ruta: str) -> bool:
+    """Dentro de la carpeta de configuración o de `allowlist_external_dirs`.
+    Hace E/S: en el ejecutor."""
+    real = Path(ruta).resolve()
+    if real.is_relative_to(Path(hass.config.config_dir).resolve()):
+        return True
+    return hass.config.is_allowed_path(str(real))
 
 
 def _registrar_servicios(hass: HomeAssistant) -> None:
@@ -261,7 +277,16 @@ def _registrar_servicios(hass: HomeAssistant) -> None:
         )
 
     async def importar(call: ServiceCall) -> ServiceResponse:
-        ruta = call.data.get("ruta") or hass.config.path(RUTA_LEGADO)
+        # Solo administradores (se registra con async_register_admin_service):
+        # con `reemplazar` puede vaciar el registro. Una ruta relativa es
+        # relativa a la carpeta de configuración, no al directorio del proceso.
+        ruta = hass.config.path(call.data.get("ruta") or RUTA_LEGADO)
+        if not await hass.async_add_executor_job(_ruta_permitida, hass, ruta):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="importar_no_permitida",
+                translation_placeholders={"ruta": ruta},
+            )
         return await _almacen(hass).async_importar(
             ruta, reemplazar=call.data["reemplazar"]
         )
@@ -274,5 +299,7 @@ def _registrar_servicios(hass: HomeAssistant) -> None:
     registro(DOMAIN, SERVICIO_DEJAR_DE_IGNORAR, dejar_de_ignorar, ESQUEMA_MATRICULA)
     registro(DOMAIN, SERVICIO_BUSCAR, buscar, ESQUEMA_MATRICULA, SupportsResponse.ONLY)
     registro(DOMAIN, SERVICIO_LISTAR, listar, vol.Schema({}), SupportsResponse.ONLY)
-    registro(DOMAIN, SERVICIO_IMPORTAR, importar, ESQUEMA_IMPORTAR, SupportsResponse.OPTIONAL)
+    async_register_admin_service(
+        hass, DOMAIN, SERVICIO_IMPORTAR, importar, ESQUEMA_IMPORTAR, SupportsResponse.OPTIONAL
+    )
     registro(DOMAIN, SERVICIO_RESOLVER_SUGERENCIA, resolver_sugerencia, ESQUEMA_RESOLVER_SUGERENCIA)

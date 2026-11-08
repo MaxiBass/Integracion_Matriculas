@@ -91,6 +91,9 @@
     "importar_ilegible": {
       "message": "No se pudo leer {ruta} como un plates.json válido. No se ha cambiado nada."
     },
+    "importar_no_permitida": {
+      "message": "Solo se puede importar desde la carpeta de configuración de Home Assistant o desde una carpeta de allowlist_external_dirs: {ruta} no lo está."
+    },
     "no_cargada": {
       "message": "La integración Matrículas no está cargada."
     },
@@ -289,7 +292,8 @@
           }
         },
         "abort": {
-          "ya_resuelta": "Esta sugerencia ya no aplica."
+          "ya_resuelta": "Esta sugerencia ya no aplica.",
+          "no_se_pudo": "No se pudo: {error}"
         },
         "error": {
           "nombre_vacio": "Falta el nombre."
@@ -312,7 +316,8 @@
           }
         },
         "abort": {
-          "ya_resuelta": "Esta sugerencia ya no aplica."
+          "ya_resuelta": "Esta sugerencia ya no aplica.",
+          "no_se_pudo": "No se pudo: {error}"
         }
       }
     }

@@ -33,6 +33,7 @@ class SensorRegistradas(EntidadMatriculas, SensorEntity):
         self._almacen = almacen
 
     async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
         # Las sugerencias cambian también con las detecciones.
         for senal in (SENAL_REGISTRO, SENAL_ESTADISTICAS):
             self.async_on_remove(

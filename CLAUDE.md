@@ -45,9 +45,9 @@ tests/test_matriculas.py
 
 En particular:
 
-- `coincidencia.py` es un porte fiel de `custom_templates/matriculas.jinja`.
-  Si cambias la lógica, cambia también la macro mientras siga en uso, y
-  vuelve a comparar las dos (§3).
+- `coincidencia.py` nació como porte fiel de `custom_templates/matriculas.jinja`.
+  La macro ya no existe en casa (comprobado el 08/11/2026), así que ahora la
+  referencia es `coincidencia.py`; sus diferencias con la macro están en §3.
 - Una coincidencia **aproximada sí abre** la puerta. Es decisión de Maxi, no
   un fallo (§4).
 - El `plates.json` antiguo **nunca se modifica** desde aquí.
@@ -71,7 +71,7 @@ editar antes en el repo.
 
 ```bash
 python3 -m venv /tmp/hav
-/tmp/hav/bin/pip install homeassistant==2026.9.2 paho-mqtt
+/tmp/hav/bin/pip install homeassistant==2026.11.0 paho-mqtt
 /tmp/hav/bin/python tests/test_matriculas.py
 node tests/test_panel.mjs
 ```

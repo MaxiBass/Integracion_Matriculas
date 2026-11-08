@@ -21,6 +21,13 @@ CLAVE_DETECCIONES = "matriculas.detecciones"
 VERSION_ALMACEN = 1
 
 MAX_HISTORIAL = 500
+
+# Matrículas desconocidas en las estadísticas (`vistas`): crecían sin límite
+# con lecturas basura. Las vistas una sola vez se olvidan a los N días, y como
+# mucho se guardan MAX (las más recientes). Las registradas y las ignoradas
+# no se tocan nunca.
+DIAS_VISTA_UNICA = 30
+MAX_VISTAS_DESCONOCIDAS = 1000
 SEGUNDOS_GUARDADO_DETECCIONES = 60
 
 # Frigate manda varias lecturas del mismo coche (mismo id de objeto) mientras

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +35,7 @@ from .const import (
     CLAVE_REGISTRO,
     CONOCIDA,
     DESCONOCIDA,
+    DIAS_VISTA_UNICA,
     DOMAIN,
     EVENTO_SUGERENCIA,
     HISTORIAL_PANEL,
@@ -43,6 +44,7 @@ from .const import (
     LONGITUD_MAXIMA_NOMBRE,
     LONGITUD_MINIMA,
     MAX_HISTORIAL,
+    MAX_VISTAS_DESCONOCIDAS,
     SEGUNDOS_GUARDADO_DETECCIONES,
     SENAL_ESTADISTICAS,
     SENAL_REGISTRO,
@@ -100,8 +102,16 @@ def marcadores_sugerencia(s: dict[str, Any]) -> dict[str, str]:
 
 
 def caducada(datos: dict[str, Any], hoy: date) -> bool:
+    """Una fecha de caducidad ilegible (editada a mano en .storage) no
+    rompe la identificación: se toma como no caducada y se avisa."""
     caduca = datos.get("caduca")
-    return bool(caduca) and date.fromisoformat(caduca) < hoy
+    if not caduca:
+        return False
+    try:
+        return date.fromisoformat(str(caduca)) < hoy
+    except ValueError:
+        _LOGGER.warning("Fecha de caducidad ilegible: %r", caduca)
+        return False
 
 
 class Almacen:
@@ -118,6 +128,7 @@ class Almacen:
         self.matriculas: dict[str, dict[str, Any]] = {}
         self.ignoradas: dict[str, dict[str, Any]] = {}
         self.vistas: dict[str, dict[str, Any]] = {}
+        self._podado: date | None = None  # último día en que se podaron
         self.historial: list[dict[str, Any]] = []
         self.importado_de: str | None = None
         self.es_nuevo = False
@@ -144,6 +155,38 @@ class Almacen:
         self.historial = detecciones.get("historial", [])
         self.avisadas = set(detecciones.get("sugerencias_avisadas", []))
         self._reconstruir_lecturas()
+        if self.podar_vistas(dt_util.utcnow()):
+            self._store_detecciones.async_delay_save(
+                self._datos_detecciones, SEGUNDOS_GUARDADO_DETECCIONES
+            )
+
+    @callback
+    def podar_vistas(self, ahora: datetime) -> int:
+        """Olvida desconocidas vistas una sola vez hace más de
+        DIAS_VISTA_UNICA días y, si aún sobran, las más antiguas hasta
+        MAX_VISTAS_DESCONOCIDAS. Devuelve cuántas quita."""
+        self._podado = ahora.date()
+        limite = ahora - timedelta(days=DIAS_VISTA_UNICA)
+
+        def ultima(v: dict[str, Any]) -> datetime:
+            fecha = dt_util.parse_datetime(str(v.get("ultima") or v.get("primera") or ""))
+            if fecha is None:
+                return ahora  # sin fecha legible: como recién vista, no se pierde
+            return fecha if fecha.tzinfo else fecha.replace(tzinfo=dt_util.UTC)
+
+        desconocidas = [
+            m for m in self.vistas if m not in self.matriculas and m not in self.ignoradas
+        ]
+        fuera = {
+            m for m in desconocidas
+            if self.vistas[m].get("veces", 0) <= 1 and ultima(self.vistas[m]) < limite
+        }
+        quedan = sorted((m for m in desconocidas if m not in fuera), key=lambda m: ultima(self.vistas[m]))
+        if len(quedan) > MAX_VISTAS_DESCONOCIDAS:
+            fuera.update(quedan[: len(quedan) - MAX_VISTAS_DESCONOCIDAS])
+        for m in fuera:
+            del self.vistas[m]
+        return len(fuera)
 
     def _reconstruir_lecturas(self) -> None:
         """Las versiones anteriores a la 0.3.0 no contaban las lecturas de cada
@@ -556,6 +599,8 @@ class Almacen:
         sugerencias.anotar_lectura(vista.setdefault("lecturas", {}), entrada.get("leida", clave))
         self.historial.append(entrada)
         del self.historial[:-MAX_HISTORIAL]
+        if self._podado != dt_util.utcnow().date():
+            self.podar_vistas(dt_util.utcnow())  # una vez al día
         self._store_detecciones.async_delay_save(
             self._datos_detecciones, SEGUNDOS_GUARDADO_DETECCIONES
         )

@@ -89,6 +89,29 @@ def test_coincidencia() -> None:
     comprobar(co.es_formato_espanol("1234BCD") and not co.es_formato_espanol("1234ABC"),
               "formato español: sin vocales")
 
+    print("\nCoincidencia — matrículas antiguas y cortas (v0.3.3)")
+    # Provincial antigua (letra + 4 cifras + 2 letras): la corrección
+    # posicional la estropeaba (B1234XV → 81234XV, dos diferencias).
+    antiguas = ["B1234XY", "1234BCD"]
+    r = co.buscar("B1234XV", antiguas)
+    comprobar((r.matricula, r.metodo) == ("B1234XY", co.CONFUSION),
+              f"B1234XV → B1234XY por confusión (obtenido {r.matricula or '(ninguna)'} por {r.metodo or '-'})")
+    r = co.buscar("B1234XK", antiguas)
+    comprobar((r.matricula, r.metodo) == ("B1234XY", co.UN_CARACTER),
+              f"B1234XK → B1234XY por un carácter (obtenido {r.matricula or '(ninguna)'})")
+    r = co.buscar("B1234XY", antiguas)
+    comprobar(r.metodo == co.EXACTA, "la antigua leída bien sigue siendo exacta")
+    r = co.buscar("I234BCF", antiguas)
+    comprobar(r.matricula == "1234BCD" and r.metodo == co.UN_CARACTER,
+              f"la corrección posicional sigue valiendo para el formato actual (I234BCF → {r.matricula or '(ninguna)'})")
+    # Cortas: un carácter distinto es casi toda la matrícula, y la aproximada abre.
+    cortas = ["AB12", "XY123", "M1234X"]
+    for leida in ("AB13", "AC12", "XY124", "XY723"):
+        r = co.buscar(leida, cortas)
+        comprobar(not r.encontrada and not r.candidatos, f"{leida}: con menos de 6 caracteres solo vale la exacta")
+    comprobar(co.buscar("AB12", cortas).metodo == co.EXACTA, "la corta exacta sí")
+    comprobar(co.buscar("M1234K", cortas).matricula == "M1234X", "con 6 caracteres sí hay aproximada")
+
 
 def test_sugerencias() -> None:
     import importlib.util
@@ -531,6 +554,19 @@ async def _recorrido(directorio: Path) -> None:
         await hass.async_block_till_done()
         ident2 = "correccion_5791fgh_5791fgj"
         antes_ev = len(avisos_ev)
+        # Si el arreglo falla (p. ej. alguien acaba de cambiar el registro),
+        # Reparaciones lo dice en vez de dar un error sin explicar.
+        r = await fm.async_init("matriculas", data={"issue_id": ident2})
+
+        async def falla(*_a, **_kw):
+            raise ServiceValidationError("de prueba")
+
+        almacen.async_resolver_sugerencia = falla
+        r = await fm.async_configure(r["flow_id"], {"next_step_id": "descartar"})
+        del almacen.async_resolver_sugerencia
+        comprobar(r["type"] == "abort" and r["reason"] == "no_se_pudo"
+                  and "de prueba" in (r.get("description_placeholders") or {}).get("error", ""),
+                  f"si el arreglo falla, Reparaciones se cierra diciendo por qué ({r.get('type')}, {r.get('reason')})")
         await _llamar(hass, "resolver_sugerencia", {"id": ident2, "accion": "otro_coche", "nombre": "Casa del 5"})
         otro = almacen.matriculas.get("5791FGJ", {})
         comprobar(otro.get("nombre") == "Casa del 5" and otro.get("avisar") is True and otro.get("abrir") is False,
@@ -568,12 +604,68 @@ async def _recorrido(directorio: Path) -> None:
         comprobar(almacen.vistas["1234BCD"]["lecturas"] == {"1234BCD": 1},
                   "las lecturas de datos antiguos se reconstruyen desde el historial")
 
+        # Poda de desconocidas: las vistas una vez hace más de 30 días se olvidan.
+        from datetime import timedelta as _td
+
+        from homeassistant.util import dt as dt_util
+
+        hace = (dt_util.utcnow() - _td(days=40)).isoformat()
+        almacen.vistas["9999ZZZ"] = {"primera": hace, "ultima": hace, "veces": 1}
+        almacen.vistas["9998ZZZ"] = {"primera": hace, "ultima": hace, "veces": 3}
+        almacen.vistas["9997ZZZ"] = {"primera": dt_util.utcnow().isoformat(), "ultima": dt_util.utcnow().isoformat(), "veces": 1}
+        quitadas = almacen.podar_vistas(dt_util.utcnow())
+        comprobar(quitadas == 1 and "9999ZZZ" not in almacen.vistas and {"9998ZZZ", "9997ZZZ"} <= set(almacen.vistas)
+                  and "1234BCD" in almacen.vistas,
+                  f"se olvidan las desconocidas vistas una vez hace más de 30 días, y nada más ({quitadas})")
+        from custom_components.matriculas import almacen as mod_almacen
+
+        copia = dict(almacen.vistas)
+        maximo = mod_almacen.MAX_VISTAS_DESCONOCIDAS
+        mod_almacen.MAX_VISTAS_DESCONOCIDAS = 1
+        almacen.podar_vistas(dt_util.utcnow())
+        mod_almacen.MAX_VISTAS_DESCONOCIDAS = maximo
+        desconocidas = [m for m in almacen.vistas if m not in almacen.matriculas and m not in almacen.ignoradas]
+        comprobar(desconocidas == ["9997ZZZ"] and "1234BCD" in almacen.vistas,
+                  f"y con el máximo, se quedan las más recientes; las registradas nunca se tocan ({desconocidas})")
+        almacen.vistas.clear()
+        almacen.vistas.update({m: v for m, v in copia.items() if not m.startswith("999")})
+
         # ── Importación manual: fichero roto no toca nada ──
         antes = json.dumps(almacen.matriculas, sort_keys=True)
         roto = directorio / "roto.json"
         roto.write_text('{"plates": {"1234BCD": ', "utf-8")
         comprobar(await _falla(hass, "importar", {"ruta": str(roto)}, "importar_ilegible"),
                   "un plates.json roto da error visible")
+        comprobar(await _falla(hass, "importar", {"ruta": "roto.json"}, "importar_ilegible"),
+                  "una ruta relativa es relativa a la carpeta de configuración, no al directorio del proceso")
+        fuera = Path(tempfile.mkdtemp(prefix="matriculas_fuera_"))
+        try:
+            (fuera / "plates.json").write_text(json.dumps(LEGADO), "utf-8")
+            comprobar(await _falla(hass, "importar", {"ruta": str(fuera / "plates.json")}, "importar_no_permitida"),
+                      "fuera de la configuración y de allowlist_external_dirs: no se importa")
+            comprobar(await _falla(hass, "importar", {"ruta": "../" + fuera.name + "/plates.json"}, "importar_no_permitida"),
+                      "ni saliendo con «..»")
+        finally:
+            shutil.rmtree(fuera, ignore_errors=True)
+        from homeassistant.core import Context
+        from homeassistant.exceptions import Unauthorized
+
+        await hass.auth.async_create_user("Dueña", group_ids=["system-admin"])  # el primero es el propietario
+        normal = await hass.auth.async_create_user("Invitado", group_ids=["system-users"])
+        comprobar(not normal.is_admin, "(el invitado no es administrador)")
+        try:
+            await hass.services.async_call("matriculas", "importar", {"reemplazar": True}, blocking=True,
+                                           context=Context(user_id=normal.id))
+            comprobar(False, "un usuario que no es administrador no puede importar")
+        except Unauthorized:
+            comprobar(True, "un usuario que no es administrador no puede importar")
+        await hass.services.async_call("matriculas", "guardar", {"matricula": "2468BDF", "nombre": "Invitada"},
+                                       blocking=True, context=Context(user_id=normal.id))
+        await hass.services.async_call("matriculas", "eliminar", {"matricula": "2468BDF"},
+                                       blocking=True, context=Context(user_id=normal.id))
+        comprobar("2468BDF" not in almacen.matriculas,
+                  "pero sí usar los servicios del panel (guardar, eliminar...)")
+        antes = json.dumps(almacen.matriculas, sort_keys=True)
         comprobar(json.dumps(almacen.matriculas, sort_keys=True) == antes,
                   "y no cambia ni una matrícula (el sistema anterior las borraba todas)")
 

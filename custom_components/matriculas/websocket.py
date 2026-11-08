@@ -26,8 +26,10 @@ def async_registrar(hass: HomeAssistant) -> None:
 
 def _instantanea(hass: HomeAssistant) -> dict[str, Any] | None:
     # Se busca la entrada en cada envío: si se recarga, el almacén es otro.
-    entradas = hass.config_entries.async_loaded_entries(DOMAIN)
-    return entradas[0].runtime_data.almacen.instantanea() if entradas else None
+    from . import almacen_cargado  # noqa: PLC0415  evita el import circular
+
+    almacen = almacen_cargado(hass)
+    return almacen.instantanea() if almacen else None
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/suscribir"})

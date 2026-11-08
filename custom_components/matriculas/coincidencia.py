@@ -1,10 +1,19 @@
 """Búsqueda de matrículas con tolerancia a errores de lectura (OCR).
 
-Es un porte fiel de la macro `buscar_matricula` de
-`custom_templates/matriculas.jinja`, con una diferencia a propósito: el paso
-3b funciona. En la macro, la lista de candidatos de ese paso se reasignaba
-dentro de un `for` sin `namespace`, y en Jinja esa asignación no sobrevive al
-bucle, así que el paso nunca encontraba nada.
+Nació como porte fiel de la macro `buscar_matricula` de
+`custom_templates/matriculas.jinja` (retirada de casa: ya no existe), con
+estas diferencias a propósito (DECISIONES §3):
+
+- El paso 3b funciona. En la macro, la lista de candidatos de ese paso se
+  reasignaba dentro de un `for` sin `namespace`, y en Jinja esa asignación no
+  sobrevive al bucle, así que el paso nunca encontraba nada.
+- (v0.3.3) Los pasos 3a y 3b comparan la lectura tal cual y la corregida
+  (paso 1) y se quedan con la menor diferencia: la corrección posicional
+  supone el formato actual (NNNNLLL) y estropeaba las matrículas provinciales
+  antiguas (`B1234XY` leída `B1234XV` pasaba a `81234XV`).
+- (v0.3.3) Los pasos 3a y 3b solo se aplican a lecturas de 6 caracteres o
+  más: en una matrícula corta, un carácter distinto es casi toda la matrícula
+  y una coincidencia aproximada abre la puerta.
 
 No importa nada de Home Assistant, para poder probarlo con `python3` a secas.
 """
@@ -37,6 +46,10 @@ CONFUSIONES = {
     "B": "R", "R": "B", "C": "G", "G": "C",
     "F": "P", "P": "F", "M": "N", "N": "M",
 }
+
+# Longitud mínima de una lectura para buscarle una coincidencia aproximada
+# (pasos 3a y 3b). Las matrículas más cortas solo coinciden exactas.
+LONGITUD_MINIMA_APROXIMADA = 6
 
 EXACTA = "exacta"
 NORMALIZADA = "normalizada"
@@ -106,6 +119,10 @@ def buscar(leida: str, conocidas: Iterable[str]) -> Coincidencia:
     3b. Si 3a no encuentra ninguno: un carácter distinto cualquiera, si hay
         un único candidato.
 
+    3a y 3b solo con lecturas de `LONGITUD_MINIMA_APROXIMADA` caracteres o
+    más, y comparando tanto la lectura como su versión corregida (la que
+    menos se diferencie).
+
     Con más de un candidato en 3a no se prueba 3b: la ambigüedad ya dice que
     la lectura no es fiable.
     """
@@ -119,14 +136,20 @@ def buscar(leida: str, conocidas: Iterable[str]) -> Coincidencia:
     if norm in conocidas:
         return Coincidencia(placa, norm, NORMALIZADA)
 
-    misma_longitud = sorted(k for k in conocidas if len(k) == len(norm))
-    tipadas = [k for k in misma_longitud if _diferencias_tipadas(norm, k) == 1]
+    if len(placa) < LONGITUD_MINIMA_APROXIMADA:
+        return Coincidencia(placa)
+
+    variantes = (placa,) if norm == placa else (placa, norm)
+    misma_longitud = sorted(k for k in conocidas if len(k) == len(placa))
+    tipadas = [
+        k for k in misma_longitud if any(_diferencias_tipadas(v, k) == 1 for v in variantes)
+    ]
     if len(tipadas) == 1:
         return Coincidencia(placa, tipadas[0], CONFUSION)
     if tipadas:
         return Coincidencia(placa, candidatos=tuple(tipadas))
 
-    genericas = [k for k in misma_longitud if _diferencias(norm, k) == 1]
+    genericas = [k for k in misma_longitud if min(_diferencias(v, k) for v in variantes) == 1]
     if len(genericas) == 1:
         return Coincidencia(placa, genericas[0], UN_CARACTER)
     return Coincidencia(placa, candidatos=tuple(genericas))

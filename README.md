@@ -8,11 +8,14 @@ permite gestionar ese registro con servicios.
   `matriculas_detectada` ya resuelto: quién es, si hay que avisar y si puede
   abrir.
 - Tolera errores de lectura del OCR (confusiones típicas y un carácter
-  distinto) sin elegir nunca entre dos candidatos.
+  distinto) sin elegir nunca entre dos candidatos. Solo en lecturas de 6
+  caracteres o más: una más corta tiene que coincidir exacta.
 - Guarda el registro en `.storage/` con escritura atómica. Un fallo nunca
   borra las matrículas.
 - Lleva estadísticas por matrícula (primera y última vez vista, veces) y un
-  historial de las últimas 500 detecciones, también de las desconocidas.
+  historial de las últimas 500 detecciones, también de las desconocidas. De
+  las desconocidas, las vistas una sola vez se olvidan a los 30 días, y se
+  guardan como mucho 1.000 (las más recientes).
 
 ## Instalar vía HACS
 
@@ -128,17 +131,23 @@ actions:
 |---|---|
 | `matriculas.guardar` | Crea o sobrescribe una matrícula |
 | `matriculas.editar` | Cambia solo los campos indicados; `nueva_matricula` la renombra |
-| `matriculas.eliminar` | La borra del registro (conserva sus estadísticas) |
+| `matriculas.eliminar` | La borra del registro. Sus estadísticas se conservan, así que vuelve a salir en **Desconocidas** (con las veces que se vio) hasta que se ignore o se vuelva a registrar |
 | `matriculas.ignorar` | No volver a avisar de una desconocida |
 | `matriculas.dejar_de_ignorar` | Deshace lo anterior |
 | `matriculas.buscar` | Identifica una lectura como si llegara de Frigate (solo respuesta) |
 | `matriculas.listar` | Registradas con estadísticas, ignoradas y desconocidas más vistas (solo respuesta) |
-| `matriculas.importar` | Importa un `plates.json` (fusionando o reemplazando) |
+| `matriculas.importar` | Importa un `plates.json` (fusionando o reemplazando). **Solo administradores.** La ruta, relativa a la carpeta de configuración (por defecto `packages/videoportero/plates.json`); fuera de ella, solo desde una carpeta de `allowlist_external_dirs` |
 | `matriculas.resolver_sugerencia` | Aplica una opción a una sugerencia: `corregir`, `otro_coche`, `eliminar` o `descartar` |
 
 Cada matrícula tiene `nombre`, `avisar`, `abrir` (puede abrir), `notas` y
 `caduca` (último día en que se reconoce). Los errores (matrícula inválida,
 que no existe…) se muestran en pantalla.
+
+**Quién puede usarlos:** el panel es para todos los usuarios, así que todos
+los servicios menos `importar` los puede llamar cualquier usuario de Home
+Assistant, también uno que no es administrador (registrar, editar, eliminar,
+ignorar, buscar, listar y resolver sugerencias). `importar` es solo para
+administradores, porque con `reemplazar` puede vaciar el registro.
 
 ## Entidades
 
@@ -151,7 +160,7 @@ que no existe…) se muestran en pantalla.
 
 ```bash
 python3 -m venv /tmp/hav
-/tmp/hav/bin/pip install homeassistant==2026.9.2 paho-mqtt
+/tmp/hav/bin/pip install homeassistant==2026.11.0 paho-mqtt
 /tmp/hav/bin/python tests/test_matriculas.py
 node tests/test_panel.mjs
 ```
